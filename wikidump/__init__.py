@@ -14,5 +14,7 @@ with open(os.path.join(
         'TORRENT_HASH')) as f:
     HASH = f.readline().strip()
 
+BZ_FILE = 'enwiki-%s-pages-articles-multistream.xml.bz2' % DUMP_VERSION
+BZ_PATH = os.path.join('data', BZ_FILE)
 
-__all__ = ['DUMP_VERSION', 'HASH']
+__all__ = ['DUMP_VERSION', 'HASH', 'BZ_FILE', 'BZ_PATH']
