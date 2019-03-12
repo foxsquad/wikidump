@@ -1,4 +1,4 @@
-"""Wikidump reader and processor module
+"""Wikidump reader and processor module.
 
 """
 
