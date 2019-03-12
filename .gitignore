@@ -1,0 +1,15 @@
+*.bz2
+data/
+
+*.pyc
+__pycache__/
+.venv/
+.env/
+venv/
+env/
+
+.env
+
+.idea/
+.vscode/
+.vs/
