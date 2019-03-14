@@ -44,10 +44,8 @@ def render_sfn(sfn):
     """Process sfn (shortened footnote) template into plain text.
 
     The reference list marked by this template usually apears in
-    the {{reflist}}.
-
-    In general, SFN template is a shortened form and combined of
-    various kind of below template.
+    the {{reflist}} and generally references to other citation
+    appear else where in the document.
 
     Ref:
         https://en.wikipedia.org/wiki/Template:Sfn
@@ -65,7 +63,9 @@ def render_sfn(sfn):
         if 'none' in ps:
             ps = 'ps='
 
+    # reference, usually not available
     ref = _get_named_params(sfn, {'ref', 'Ref'})
+
     p = _get_named_params(sfn, {'p', 'page'})  # single page
     pp = _get_named_params(sfn, {'pp', 'pages'})  # page range
     loc = _get_named_params(sfn, 'loc')  # source location
@@ -79,8 +79,8 @@ def render_sfn(sfn):
     authors = sfn.params[:min(optional_idx) - 1]
     pub_yr = sfn.params[min(optional_idx) - 1]
 
-    # Upto 4 authors could be specified into author list
-    # Each render a little different
+    # Up to 04 authors could be specified in the author list.
+    # Each case is rendered a little different
     l = len(authors)
     if l == 4:
         text = '%s et al. %s' % (authors[0], pub_yr)
@@ -91,6 +91,8 @@ def render_sfn(sfn):
         remained = authors[:-1]
         text = '%s & %s %s' % (', '.join(remained), last, pub_yr)
 
+    # p, pp and loc are mutual exclusive. Only one of this
+    # should be rendered.
     if p is not None:
         text += ', p. %s' % p.value
     elif pp is not None:
@@ -98,6 +100,7 @@ def render_sfn(sfn):
     elif loc is not None:
         text += ', %s' % loc.value
 
+    # add postscript value
     text += ps.split('=')[1]
 
     return text
