@@ -1,4 +1,4 @@
-"""Wikidump reader and processor module
+"""Wikidump reader and processor module.
 
 """
 
@@ -14,5 +14,16 @@ with open(os.path.join(
         'TORRENT_HASH')) as f:
     HASH = f.readline().strip()
 
+BZ_FILE = 'enwiki-%s-pages-articles-multistream.xml.bz2' % DUMP_VERSION
+BZ_PATH = os.path.join('data', BZ_FILE)
 
-__all__ = ['DUMP_VERSION', 'HASH']
+DEFAULT_NAMESPACE = 'http://www.mediawiki.org/xml/export-0.10/'
+
+# Known namespaces used by Database Exporter
+NSMAP = {
+    None: DEFAULT_NAMESPACE,
+    'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+}
+
+__all__ = ['DUMP_VERSION', 'HASH', 'BZ_FILE',
+           'BZ_PATH', 'DEFAULT_NAMESPACE', 'NSMAP']
