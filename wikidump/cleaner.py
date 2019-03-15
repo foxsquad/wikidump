@@ -14,7 +14,7 @@ def normalize_inter_lang_text(wikicode):
     for t in wikicode.ifilter_templates():
         if t.name != 'lang':
             continue
-        _, text = t.params
+        _, text = t.params[0:2]
         text_value = text.value.strip_code()
         wikicode.replace(t, text_value)
 
