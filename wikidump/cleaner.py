@@ -38,7 +38,11 @@ def strip(src):
     clean_up_ref_tag(wikicode)  # Clean up ref tags in main article
 
     # Finally, strip unprintable code and clean up duplicated quotes.
-    s = wikicode.strip_code().replace('""', '"')
+    s = (wikicode
+         .strip_code()          # Strip code using default mwpsr function
+         .replace('""', '"')    # Remove duplicated quotes after
+                                # stripped out everything else
+         )
 
     # Allocate new object, for safe
     return str(s)
