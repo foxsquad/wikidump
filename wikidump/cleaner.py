@@ -27,7 +27,7 @@ def normalize_inter_lang_text(wikicode):
         # We only care about the second required param here
         text = t.params[1]
         text_value = text.value.strip_code()
-        wikicode.replace(t, text_value)
+        wikicode.replace(str(t), text_value)
 
 
 def clean_up_ref_tag(wikicode):
