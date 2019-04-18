@@ -1,34 +1,30 @@
-#!/usr/bin/env python3
+"""Local training plugins."""
 
-import os.path
-import sys
+import os
 
-from absl import app, flags, logging
-from absl.flags import argparse_flags
-
+from absl import flags, logging
 
 FLAGS = flags.FLAGS
 
+
 flags.DEFINE_integer('epochs', 10, 'Number of epochs to train.',
                      lower_bound=1, short_name='e')
-flags.DEFINE_integer('batch_size', 100, 'Batch size for input data.',
+flags.DEFINE_integer('batch_size', 100, 'Batch size of input data.',
                      lower_bound=1, short_name='b')
-flags.DEFINE_float('learning_rate', 1e-4, 'Optimizer initial learning rate, '
-                   'used when a new optimizer is needed to be created.',
-                   lower_bound=1e-10, short_name='lr')
+flags.DEFINE_float('learning_rate', 1e-4, '\
+Initial learning rate for new optimizer, used when \
+a new optimizer is created.', lower_bound=1e-10, short_name='lr')
 flags.DEFINE_integer('patience', 3, 'EarlyStopping callback patience value.',
                      lower_bound=1)
 
-flags.DEFINE_integer('buffer', 1000, 'Buffer for shuffle action.')
-flags.DEFINE_integer('seed', None, 'Buffer random seed.')
-flags.DEFINE_integer('article_to_take', 10,
-                     'Number of article to take to train dataset.',
+flags.DEFINE_integer('buffer', 1000, 'Shuffle buffer value for train dataset.',
                      lower_bound=1)
+flags.DEFINE_integer('seed', None, 'Shuffle random seed.')
 
 flags.DEFINE_string('checkpoint_dir', None, 'Directory to save checkpoint. '
                     'Default value for checkpoint directory is '
                     '"{model-name}_ckpt".')
-flags.DEFINE_bool('save_state', False, 'Whether to save training state. '
+flags.DEFINE_bool('save_state', True, 'Whether to save training state. '
                   'The optimizer state will be loaded from this file.',
                   short_name='s')
 flags.DEFINE_string('state_file', None, 'Path to save state file. '
@@ -42,8 +38,7 @@ flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
                   'checkpoint, otherwise weights will be initialized with '
                   'default value in `model_fn`.')
 
-flags.DEFINE_bool('decorate', False, 'Enable console decoration.',
-                  short_name='d')
+flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
 
 
 class Spinner(object):
@@ -72,10 +67,16 @@ class Spinner(object):
 
 
 def train_loop(model_name, model_fn, input_fn):
-    if 'win32' in sys.platform:
-        patch_mkl()
     import tensorflow as tf
     import tensorflow.keras.callbacks as C
+
+    # Process additional FLAGS
+    if FLAGS.checkpoint_dir is None:
+        FLAGS.checkpoint_dir = '{model_name}_ckpt'.format(
+            model_name=model_name)
+    if FLAGS.state_file is None:
+        FLAGS.state_file = os.path.join('{checkpoint_dir}', '_state.hdf5')\
+            .format(checkpoint_dir=FLAGS.checkpoint_dir)
 
     nan = float('nan')
     spinner = Spinner() if FLAGS.decorate else ''
@@ -115,7 +116,7 @@ def train_loop(model_name, model_fn, input_fn):
 
     ckpt_path = os.path.join(
         FLAGS.checkpoint_dir,
-        'epoch_{epoch}_{val_loss:.3f}.ckpt')
+        'epoch_{epoch}_{val_loss:.4f}.ckpt')
     latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
@@ -126,7 +127,8 @@ def train_loop(model_name, model_fn, input_fn):
         )
 
     if FLAGS.load_state:
-        logging.info('Loading model from last state')
+        logging.info('Loading model from last state file "%s"',
+                     FLAGS.state_file)
         try:
             model = tf.keras.models.load_model(
                 FLAGS.state_file,
@@ -139,6 +141,8 @@ def train_loop(model_name, model_fn, input_fn):
             logging.error('Last state file not found,'
                           ' will construct a blank model.')
             model = model_fn()
+    else:
+        model = model_fn()
 
     if FLAGS.load_weights:
         if latest_checkpoint is not None:
@@ -189,91 +193,3 @@ def train_loop(model_name, model_fn, input_fn):
 
     ev_test = model.evaluate(test_dataset)
     print('\rEvaluation on test dataset:       {:.4f}'.format(ev_test))
-
-
-def patch_mkl():
-    import ctypes
-    from win32 import win32api
-    try:
-        import _thread as thread
-    except ImportError:
-        import thread
-
-    try:
-        # Load the DLL manually to ensure its handler gets
-        # set before our handler.
-        ctypes.CDLL('libmmd.dll')
-        ctypes.CDLL('libifcoremd.dll')
-    except OSError:
-        # If the libifcoremd.dll does not exist, skip the rest steps.
-        return
-
-    print('Patching "libifcoremd.dll"... ', end='')
-    try:
-        # Now set our handler for CTRL_C_EVENT. Other control event
-        # types will chain to the next handler.
-        def handler(dwCtrlType, hook_sigint=thread.interrupt_main):
-            if dwCtrlType == 0:  # CTRL_C_EVENT
-                hook_sigint()
-                return 1  # don't chain to the next handler
-            return 0  # chain to the next handler
-
-        win32api.SetConsoleCtrlHandler(handler, 1)
-
-        print('Patch done.')
-    except Exception:
-        print('Patch failed.')
-
-
-def validate_model_module(name):
-    """Validate model module availability."""
-    import importlib
-
-    model_module = importlib.import_module(name)
-    model_fn = model_module.model_fn
-    input_fn = model_module.input_fn
-
-    _name = model_module.__name__
-    model_name = _name.split('.')[-1] if '.' in _name else _name
-
-    return model_name, model_fn, input_fn
-
-
-model_module_name = ''
-
-
-def main(argv):
-    argv = argv[1:]
-
-    model_name, model_fn, input_fn = validate_model_module(model_module_name)
-
-    # Process additional FLAGS
-    if FLAGS.checkpoint_dir is None:
-        FLAGS.checkpoint_dir = '{model_name}_ckpt'.format(
-            model_name=model_name)
-    if FLAGS.state_file is None:
-        FLAGS.state_file = os.path.join('{checkpoint_dir}', '_state.hdf5')\
-            .format(checkpoint_dir=FLAGS.checkpoint_dir)
-
-    train_loop(model_name, model_fn, input_fn)
-
-
-def local_config(argv=('',), **kwargs):
-    parser = argparse_flags.ArgumentParser(
-        prog='trainingtool',
-        description='TensorFlow training bootstrap tool.')
-
-    parser.add_argument('model_module_name', help='Model module name')
-
-    arg0 = argv[0] if argv else ''
-    ns = parser.parse_args(argv[1:])  # Strip binary name from argv
-
-    # Populate model_module_name to global FLAGS
-    global model_module_name
-    model_module_name = ns.model_module_name
-
-    return [arg0]
-
-
-if __name__ == "__main__":
-    app.run(main, flags_parser=local_config)

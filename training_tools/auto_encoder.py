@@ -2,6 +2,9 @@ from absl import flags
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_integer('train_articles', 10,
+                     'Number of article to take to train dataset.',
+                     lower_bound=1)
 
 dataset_path = 'first-1000.sqlite3'
 
@@ -30,7 +33,7 @@ def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
             'sqlite', dataset_path,
             'select content from wiki_text',
             tf.string)
-        train_dataset = base.skip(5).take(FLAGS.article_to_take)
+        train_dataset = base.skip(5).take(FLAGS.train_articles)
         val_dataset = base.take(1)
         test_dataset = base.skip(1).take(1)
 
