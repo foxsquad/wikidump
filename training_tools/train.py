@@ -4,15 +4,16 @@ import os.path
 import sys
 
 from absl import app, flags, logging
+from absl.flags import argparse_flags
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('epochs', 10, 'Number of epochs to train.',
                      lower_bound=1, short_name='e')
-flags.DEFINE_integer('batchsize', 100, 'Batch size for input data.',
+flags.DEFINE_integer('batch_size', 100, 'Batch size for input data.',
                      lower_bound=1, short_name='b')
-flags.DEFINE_float('learningrate', 1e-4, 'Optimizer initial learning rate, '
+flags.DEFINE_float('learning_rate', 1e-4, 'Optimizer initial learning rate, '
                    'used when a new optimizer is needed to be created.',
                    lower_bound=1e-10, short_name='lr')
 flags.DEFINE_integer('patience', 3, 'EarlyStopping callback patience value.',
@@ -24,20 +25,20 @@ flags.DEFINE_integer('article_to_take', 10,
                      'Number of article to take to train dataset.',
                      lower_bound=1)
 
-flags.DEFINE_string('checkpointdir', None, 'Directory to save checkpoint. '
+flags.DEFINE_string('checkpoint_dir', None, 'Directory to save checkpoint. '
                     'Default value for checkpoint directory is '
                     '"{model-name}_ckpt".')
-flags.DEFINE_bool('savestate', False, 'Whether to save training state. '
-                  'The optimizer state will be loaded from this file. ',
+flags.DEFINE_bool('save_state', False, 'Whether to save training state. '
+                  'The optimizer state will be loaded from this file.',
                   short_name='s')
-flags.DEFINE_string('statefile', None, 'Path to save state file. '
+flags.DEFINE_string('state_file', None, 'Path to save state file. '
                     'Default value for state file is '
-                    '"{checkpoint-dir}/_state.hdf5"')
-flags.DEFINE_bool('loadstate', True, 'Resume training process with best '
+                    '"{checkpoint-dir}/_state.hdf5".')
+flags.DEFINE_bool('load_state', True, 'Resume training process with best '
                   'effort. Last train state will be loaded from saved state, '
                   'otherwise a new optimizer will be compiled with learning '
                   'rate defined in "--learning-rate".')
-flags.DEFINE_bool('loadweights', True, 'Load weights from latest available '
+flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
                   'checkpoint, otherwise weights will be initialized with '
                   'default value in `model_fn`.')
 
@@ -94,9 +95,7 @@ def train_loop(model_name, model_fn, input_fn):
             val_loss = logs.get('val_loss', nan)
             print(
                 '\rEpoch {e} - loss: {loss:.4f}  val loss: {val_loss:.4f}'
-                .format(e=epoch + 1,
-                        loss=loss,
-                        val_loss=val_loss)
+                .format(e=epoch + 1, loss=loss, val_loss=val_loss)
             )
 
     class SaveStateCallback(C.Callback):
@@ -108,29 +107,29 @@ def train_loop(model_name, model_fn, input_fn):
             self.model.save(self.state_file)
 
     logging.info('Calling `input_fn` to generate dataset')
-    data_fn = input_fn(FLAGS.batchsize, FLAGS.buffer, FLAGS.seed)
+    data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
 
     train_dataset = data_fn(tf.estimator.ModeKeys.TRAIN)
     vali_dataset = data_fn(tf.estimator.ModeKeys.EVAL)
     test_dataset = data_fn(tf.estimator.ModeKeys.PREDICT)
 
     ckpt_path = os.path.join(
-        FLAGS.checkpointdir,
+        FLAGS.checkpoint_dir,
         'epoch_{epoch}_{val_loss:.3f}.ckpt')
-    latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpointdir)
+    latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
-    optimizer = tf.keras.optimizers.Adam(FLAGS.learningrate)
+    optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
     def loss(a, b):
         return tf.keras.losses.sparse_categorical_crossentropy(
             a, b, True
         )
 
-    if FLAGS.loadstate:
+    if FLAGS.load_state:
         logging.info('Loading model from last state')
         try:
             model = tf.keras.models.load_model(
-                FLAGS.statefile,
+                FLAGS.state_file,
                 custom_objects={'loss': loss})
         except ValueError:
             logging.error('Failed to load model from last state, '
@@ -141,7 +140,7 @@ def train_loop(model_name, model_fn, input_fn):
                           ' will construct a blank model.')
             model = model_fn()
 
-    if FLAGS.loadweights:
+    if FLAGS.load_weights:
         if latest_checkpoint is not None:
             logging.info('Restoring model weights from latest checkpoint "%s"',
                          latest_checkpoint)
@@ -153,7 +152,7 @@ def train_loop(model_name, model_fn, input_fn):
         else:
             logging.warning('Latest checkpoint not found at dir "%s", '
                             'will initialize model weights as defined in '
-                            '`model_fn`.', FLAGS.checkpointdir)
+                            '`model_fn`.', FLAGS.checkpoint_dir)
 
     if not model.optimizer:
         logging.info('Compilling model optimizer and loss function')
@@ -166,8 +165,8 @@ def train_loop(model_name, model_fn, input_fn):
     logging.info('Restoring best `val_loss`')
     ckpt_callback.best = model.evaluate(vali_dataset, verbose=0)
 
-    if FLAGS.savestate:
-        save_state = [SaveStateCallback(FLAGS.statefile)]
+    if FLAGS.save_state:
+        save_state = [SaveStateCallback(FLAGS.state_file)]
     else:
         save_state = []
 
@@ -234,29 +233,47 @@ def validate_model_module(name):
     model_fn = model_module.model_fn
     input_fn = model_module.input_fn
 
-    if '.' in name:
-        model_name = name.split('.')[-1]
-    else:
-        model_name = name
+    _name = model_module.__name__
+    model_name = _name.split('.')[-1] if '.' in _name else _name
 
     return model_name, model_fn, input_fn
+
+
+model_module_name = ''
 
 
 def main(argv):
     argv = argv[1:]
 
-    model_name, model_fn, input_fn = validate_model_module(argv[0])
+    model_name, model_fn, input_fn = validate_model_module(model_module_name)
 
     # Process additional FLAGS
-    if FLAGS.checkpointdir is None:
-        FLAGS.checkpointdir = '{model_name}_ckpt'.format(
+    if FLAGS.checkpoint_dir is None:
+        FLAGS.checkpoint_dir = '{model_name}_ckpt'.format(
             model_name=model_name)
-    if FLAGS.statefile is None:
-        FLAGS.statefile = os.path.join('{checkpoint_dir}', '_state.hdf5')\
-            .format(checkpoint_dir=FLAGS.checkpointdir)
+    if FLAGS.state_file is None:
+        FLAGS.state_file = os.path.join('{checkpoint_dir}', '_state.hdf5')\
+            .format(checkpoint_dir=FLAGS.checkpoint_dir)
 
     train_loop(model_name, model_fn, input_fn)
 
 
+def local_config(argv=('',), **kwargs):
+    parser = argparse_flags.ArgumentParser(
+        prog='trainingtool',
+        description='TensorFlow training bootstrap tool.')
+
+    parser.add_argument('model_module_name', help='Model module name')
+
+    arg0 = argv[0] if argv else ''
+    ns = parser.parse_args(argv[1:])  # Strip binary name from argv
+
+    # Populate model_module_name to global FLAGS
+    global model_module_name
+    model_module_name = ns.model_module_name
+
+    return [arg0]
+
+
 if __name__ == "__main__":
-    app.run(main)
+    app.run(main, flags_parser=local_config)
