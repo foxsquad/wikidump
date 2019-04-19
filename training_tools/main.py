@@ -10,10 +10,18 @@ from default import PLUGINS
 FLAGS = flags.FLAGS
 
 
-flags.DEFINE_bool('distributed', False, '\
+flags.DEFINE_boolean('distributed', False, '\
 Enable distributed training. Currently, this will use the \
 multiworker distributed strategy with estimator training \
 loop.')
+
+flags.DEFINE_integer('train_articles', 10,
+                     'Number of article to take to train dataset.',
+                     lower_bound=1)
+flags.DEFINE_boolean('repeat', False, '\
+Repeat dataset on distributed training. Note that this flag \
+does not have effect on local training process. This flag is \
+intended for indefinite traning on distributed system.')
 
 
 def patch_mkl():

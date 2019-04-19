@@ -2,9 +2,6 @@ from absl import flags
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('train_articles', 10,
-                     'Number of article to take to train dataset.',
-                     lower_bound=1)
 
 dataset_path = 'first-1000.sqlite3'
 
@@ -28,6 +25,10 @@ def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
         article = tf.clip_by_value(article, 0, max_charcode)
         return tf.data.Dataset.from_tensor_slices(article)
 
+    def to_tuple(x):
+        x = tf.expand_dims(x, axis=-1)
+        return x, x
+
     def wrapper(mode, input_context=None):
         base = tf.data.experimental.SqlDataset(
             'sqlite', dataset_path,
@@ -48,18 +49,23 @@ def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
             d = d.apply(tf.data.experimental.filter_for_shard(
                 input_context.num_input_pipelines,
                 input_context.input_pipeline_id))
-        return d.flat_map(to_sequence) \
-                .map(lambda x: tf.expand_dims(x, axis=-1)) \
-                .map(lambda x: (x, x)) \
-                .shuffle(shuffle_buffer, seed=shuffle_seed) \
-                .batch(batch_size)
+        d = d.flat_map(to_sequence) \
+            .apply(tf.data.experimental.map_and_batch(
+                to_tuple, batch_size, drop_remainder=True))
+
+        if FLAGS.repeat:
+            d = d.apply(tf.data.experimental.shuffle_and_repeat(
+                shuffle_buffer, None, shuffle_seed))
+        else:
+            d = d.shuffle(shuffle_buffer, shuffle_seed)
+
+        return d
 
     return wrapper
 
 
 def model_fn():
-    from tensorflow.keras import layers
-    from tensorflow.keras import Sequential
+    from tensorflow.python.keras import layers, Sequential
 
     model = Sequential([
         layers.Dense(20, 'tanh', bias_initializer='glorot_uniform',
