@@ -1,0 +1,23 @@
+# The `cluster` informatioin should be distribute across workers,
+# and should be set to the TF_CONFIG environment variable by the
+# `train_loop` function.
+cluster:
+  chief:
+  - 192.168.129.119:22222
+  worker:
+  - 192.168.129.163:12341
+# Task value is defined from CLI arguments and should not be read
+# from this file. The value here is for illustration purpose, when
+# the TF_CONFIG variable is set by `train_loop`.
+# task:
+#   type: worker
+#   index: -1
+
+# Unified parameters that span across workers
+batch_size: 100
+shuffle_buffer: 1000
+shuffle_seed: 4456
+tf_random_seed: 7777
+model_dir: 'model_dir'
+save_checkpoints_steps: 1000
+step_counter_freq: 200
