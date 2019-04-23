@@ -39,6 +39,7 @@ flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
                   'default value in `model_fn`.')
 
 flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
+flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
 
 
 class Spinner(object):
@@ -89,16 +90,15 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             if batch % 20 == 0:
                 logs = logs or {}
                 loss = logs.get('loss')
-                print('\r {} loss {:.4f}'.format(spinner, loss), end='')
+                print(f' {spinner} loss {loss:.4f}\r', end='')
 
         def on_epoch_end(self, epoch, logs=None):
             logs = logs or {}
             loss = logs.get('loss', nan)
             val_loss = logs.get('val_loss', nan)
-            print(
-                '\rEpoch {e} - loss: {loss:.4f}  val loss: {val_loss:.4f}'
-                .format(e=epoch + 1, loss=loss, val_loss=val_loss)
-            )
+            print(f'Epoch {epoch + 1} - '
+                  f'loss: {loss:.4f}  '
+                  f'val loss: {val_loss:.4f}\r')
 
     class SaveStateCallback(C.Callback):
         def __init__(self, state_file):
@@ -128,17 +128,22 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         try:
             model = tf.keras.models.load_model(
                 FLAGS.state_file,
-                custom_objects={'loss': loss_fn})
-        except ValueError:
+                custom_objects={'loss_fn': loss_fn})
+        except ValueError as e:
+            logging.error(e)
             logging.error('Failed to load model from last state, '
                           'will construct a blank model instead.')
             model = model_fn()
-        except OSError:
+        except OSError as e:
+            logging.error(e)
             logging.error('Last state file not found,'
                           ' will construct a blank model.')
             model = model_fn()
     else:
         model = model_fn()
+
+    if FLAGS.summary:
+        model.summary()
 
     if FLAGS.load_weights:
         if latest_checkpoint is not None:
@@ -162,14 +167,17 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         ckpt_path,
         save_best_only=True,
         save_weights_only=True)
-    logging.info('Restoring best `val_loss`')
-    ckpt_callback.best = model.evaluate(vali_dataset, verbose=1)
+
+    logging.info('Calculating `val_loss` with current model state')
+    ckpt_callback.best = model.evaluate(vali_dataset, verbose=0)
+    logging.info('Current val_loss: %.3f', ckpt_callback.best)
 
     if FLAGS.save_state:
         save_state = [SaveStateCallback(FLAGS.state_file)]
     else:
         save_state = []
 
+    logging.info('Begin training process')
     try:
         model.fit(
             train_dataset, validation_data=vali_dataset,
@@ -185,7 +193,10 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     except KeyboardInterrupt:
         pass
     finally:
-        print('\nTrain done.')
+        logging.info('Train process done.')
+        if FLAGS.save_state:
+            logging.info('Saving current model state')
+            model.save(FLAGS.state_file)
 
-    ev_test = model.evaluate(test_dataset)
-    print('\rEvaluation on test dataset:       {:.4f}'.format(ev_test))
+    ev_test = model.evaluate(test_dataset, verbose=0)
+    logging.info('[on test dataset] test_loss = %.4f', ev_test)
