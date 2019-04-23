@@ -20,7 +20,7 @@ flags.DEFINE_integer('taskindex', None,
                      lower_bound=0, short_name='i')
 
 
-def train_loop(model_name, model_fn, input_fn):
+def train_loop(model_name, model_fn, input_fn, loss_fn):
     # Early exit, do not import tensorflow as early here.
     if FLAGS.task is None:
         raise UsageError(
@@ -74,7 +74,7 @@ def train_loop(model_name, model_fn, input_fn):
         model_dir=model_dir,
         save_checkpoints_steps=save_checkpoints_steps)
     classsifier = tf.estimator.Estimator(
-        model_fn=model_fn_wrapper(model_fn),
+        model_fn=model_fn_wrapper(model_fn, loss_fn),
         config=config)
 
     train_spec = tf.estimator.TrainSpec(input_fn=input_fn, hooks=hooks)
@@ -89,7 +89,7 @@ def train_loop(model_name, model_fn, input_fn):
         return
 
 
-def model_fn_wrapper(model_fn):
+def model_fn_wrapper(model_fn, loss_fn):
     # NOTE: As the current API version is v2.0-alpha and is expected
     # changing in the future, review this function when the final
     # v2.0 releases.
@@ -118,7 +118,6 @@ def model_fn_wrapper(model_fn):
                 labels=labels,
                 predictions=predictions)
 
-        loss_fn = tf.losses.SparseCategoricalCrossentropy(True)
         loss = loss_fn(labels, logits)
         if mode == tf.estimator.ModeKeys.EVAL:
             return tf.estimator.EstimatorSpec(mode, loss=loss)

@@ -66,9 +66,10 @@ class Spinner(object):
     __repr__ = __str__
 
 
-def train_loop(model_name, model_fn, input_fn):
+def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
-    import tensorflow.keras.callbacks as C
+    from tensorflow.python.keras import callbacks as C
+    from tensorflow.python.estimator.estimator import ModeKeys
 
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
@@ -110,9 +111,9 @@ def train_loop(model_name, model_fn, input_fn):
     logging.info('Calling `input_fn` to generate dataset')
     data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
 
-    train_dataset = data_fn(tf.estimator.ModeKeys.TRAIN)
-    vali_dataset = data_fn(tf.estimator.ModeKeys.EVAL)
-    test_dataset = data_fn(tf.estimator.ModeKeys.PREDICT)
+    train_dataset = data_fn(ModeKeys.TRAIN)
+    vali_dataset = data_fn(ModeKeys.EVAL)
+    test_dataset = data_fn(ModeKeys.PREDICT)
 
     ckpt_path = os.path.join(
         FLAGS.checkpoint_dir,
@@ -121,18 +122,13 @@ def train_loop(model_name, model_fn, input_fn):
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
-    def loss(a, b):
-        return tf.keras.losses.sparse_categorical_crossentropy(
-            a, b, True
-        )
-
     if FLAGS.load_state:
         logging.info('Loading model from last state file "%s"',
                      FLAGS.state_file)
         try:
             model = tf.keras.models.load_model(
                 FLAGS.state_file,
-                custom_objects={'loss': loss})
+                custom_objects={'loss': loss_fn})
         except ValueError:
             logging.error('Failed to load model from last state, '
                           'will construct a blank model instead.')
@@ -160,14 +156,14 @@ def train_loop(model_name, model_fn, input_fn):
 
     if not model.optimizer:
         logging.info('Compilling model optimizer and loss function')
-        model.compile(optimizer, loss)
+        model.compile(optimizer, loss_fn)
 
     ckpt_callback = C.ModelCheckpoint(
         ckpt_path,
         save_best_only=True,
         save_weights_only=True)
     logging.info('Restoring best `val_loss`')
-    ckpt_callback.best = model.evaluate(vali_dataset, verbose=0)
+    ckpt_callback.best = model.evaluate(vali_dataset, verbose=1)
 
     if FLAGS.save_state:
         save_state = [SaveStateCallback(FLAGS.state_file)]

@@ -65,11 +65,12 @@ def validate_model_module(name):
     model_module = importlib.import_module(name)
     model_fn = model_module.model_fn
     input_fn = model_module.input_fn
+    loss_fn = model_module.loss_fn
 
     _name = model_module.__name__
     model_name = _name.split('.')[-1] if '.' in _name else _name
 
-    return model_name, model_fn, input_fn
+    return model_name, model_fn, input_fn, loss_fn
 
 
 model_module_name = ''
@@ -78,7 +79,8 @@ model_module_name = ''
 def main(argv):
     argv = argv[1:]
 
-    model_name, model_fn, input_fn = validate_model_module(model_module_name)
+    model_name, model_fn, input_fn, loss_fn =\
+        validate_model_module(model_module_name)
 
     if 'win32' in sys.platform:
         patch_mkl()
@@ -90,7 +92,7 @@ def main(argv):
         m = PLUGINS.local
 
     train_loop = m.train_loop
-    train_loop(model_name, model_fn, input_fn)
+    train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
 def local_config(argv=('',), **kwargs):

@@ -1,3 +1,4 @@
+import tensorflow as tf
 from absl import flags
 
 FLAGS = flags.FLAGS
@@ -14,7 +15,6 @@ def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
 
     Note that param `article_to_take` only available for `TRAIN` mode.
     """
-    import tensorflow as tf
 
     max_charcode = 0x024F
 
@@ -77,3 +77,9 @@ def model_fn():
     ], name='simple_auto_encoder')
 
     return model
+
+
+def loss_fn(a, b):
+    return tf.keras.losses.sparse_categorical_crossentropy(
+        a, b, True
+    )
