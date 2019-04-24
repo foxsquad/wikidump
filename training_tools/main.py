@@ -15,13 +15,9 @@ Enable distributed training. Currently, this will use the \
 multiworker distributed strategy with estimator training \
 loop.')
 
-flags.DEFINE_integer('train_articles', 10,
-                     'Number of article to take to train dataset.',
-                     lower_bound=1)
-flags.DEFINE_boolean('repeat', False, '\
-Repeat dataset on distributed training. Note that this flag \
-does not have effect on local training process. This flag is \
-intended for indefinite traning on distributed system.')
+
+for plugin in PLUGINS:
+    flags.adopt_module_key_flags(plugin)
 
 
 def patch_mkl():
@@ -73,14 +69,8 @@ def validate_model_module(name):
     return model_name, model_fn, input_fn, loss_fn
 
 
-model_module_name = ''
-
-
 def main(argv):
-    argv = argv[1:]
-
-    model_name, model_fn, input_fn, loss_fn =\
-        validate_model_module(model_module_name)
+    *argv, model_name, model_fn, input_fn, loss_fn = argv
 
     if 'win32' in sys.platform:
         patch_mkl()
@@ -98,19 +88,29 @@ def main(argv):
 def local_config(argv=('',), **kwargs):
     parser = argparse_flags.ArgumentParser(
         prog='trainingtool',
-        description='TensorFlow training bootstrap tool.')
+        description='A TensorFlow training bootstrap tool.')
 
-    parser.add_argument('model_module_name', metavar='MODEL',
-                        help='Model module name')
+    parser.add_argument('model_module_name', metavar='MODEL_MODULE',
+                        help='''\
+        Model module name. The module must expose these functions with
+        compatible signature: model_fn(),
+        input_fn(batch_size, shuffle_buffer, shuffle_seed),
+        loss_fn(y_true, y_pred)''')
+    parser.add_argument('remained', metavar='...', nargs='...',
+                        help='Additional flags that might be passed to '
+                        'model module.')
 
     arg0 = argv[0] if argv else ''
     ns = parser.parse_args(argv[1:])  # Strip binary name from argv
 
-    # Populate model_module_name
-    global model_module_name
-    model_module_name = ns.model_module_name
+    # Load the model_module
+    model_name, model_fn, input_fn, loss_fn =\
+        validate_model_module(ns.model_module_name)
+    # Update FLAGS after we load the model module, as model module
+    # might defined it own flag(s)
+    FLAGS([arg0] + ns.remained)
 
-    return [arg0]
+    return [arg0, model_name, model_fn, input_fn, loss_fn]
 
 
 if __name__ == "__main__":

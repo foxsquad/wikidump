@@ -4,6 +4,10 @@ from absl import flags
 FLAGS = flags.FLAGS
 
 
+flags.DEFINE_integer('train_articles', 10,
+                     'Number of article to take to train dataset.',
+                     lower_bound=1)
+
 dataset_path = 'first-1000.sqlite3'
 
 

@@ -29,7 +29,7 @@ flags.DEFINE_bool('save_state', True, 'Whether to save training state. '
                   short_name='s')
 flags.DEFINE_string('state_file', None, 'Path to save state file. '
                     'Default value for state file is '
-                    '"{checkpoint-dir}/_state.hdf5".')
+                    '"{checkpoint_dir}/_state.h5".')
 flags.DEFINE_bool('load_state', True, 'Resume training process with best '
                   'effort. Last train state will be loaded from saved state, '
                   'otherwise a new optimizer will be compiled with learning '
@@ -39,6 +39,7 @@ flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
                   'default value in `model_fn`.')
 
 flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
+flags.DEFINE_integer('update_freq', 1, 'Update frequency.')
 flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
 
 
@@ -77,8 +78,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         FLAGS.checkpoint_dir = '{model_name}_ckpt'.format(
             model_name=model_name)
     if FLAGS.state_file is None:
-        FLAGS.state_file = os.path.join('{checkpoint_dir}', '_state.hdf5')\
-            .format(checkpoint_dir=FLAGS.checkpoint_dir)
+        FLAGS.state_file = os.path.join(
+            FLAGS.checkpoint_dir, '_state.h5')
 
     nan = float('nan')
     spinner = Spinner() if FLAGS.decorate else ''
@@ -87,10 +88,11 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         """A simple end-of-epoch logger."""
 
         def on_batch_end(self, batch, logs=None):
-            if batch % 20 == 0:
-                logs = logs or {}
-                loss = logs.get('loss')
-                print(f' {spinner} loss {loss:.4f}\r', end='')
+            if FLAGS.update_freq and batch % FLAGS.update_freq != 0:
+                return
+            logs = logs or {}
+            loss = logs.get('loss')
+            print(f' {spinner} loss {loss:.4f}\r', end='')
 
         def on_epoch_end(self, epoch, logs=None):
             logs = logs or {}
@@ -196,7 +198,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     finally:
         logging.info('Train process done.')
         if FLAGS.save_state:
-            logging.info('Saving current model state')
+            logging.info('Saving current training state')
             model.save(FLAGS.state_file)
 
     ev_test = model.evaluate(test_dataset, verbose=0)

@@ -19,6 +19,11 @@ flags.DEFINE_integer('taskindex', None,
                      'Task index, as defined in --configfile.',
                      lower_bound=0, short_name='i')
 
+flags.DEFINE_boolean('repeat', False, '\
+Repeat dataset on distributed training. Note that this flag \
+does not have effect on local training process. This flag is \
+intended for indefinite traning on distributed system.')
+
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     # Early exit, do not import tensorflow as early here.
