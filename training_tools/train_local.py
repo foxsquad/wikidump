@@ -184,7 +184,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             epochs=FLAGS.epochs, verbose=FLAGS.v,
             callbacks=[
                 C.EarlyStopping(
-                    monitor='val_loss', patience=1,
+                    monitor='val_loss',
+                    patience=FLAGS.patience,
                     restore_best_weights=True),
                 C.TerminateOnNaN(),
                 ckpt_callback,
