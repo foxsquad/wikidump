@@ -39,34 +39,13 @@ flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
                   'checkpoint, otherwise weights will be initialized with '
                   'default value in `model_fn`.')
 
+flags.DEFINE_bool('tensorboard', False, 'Enable TensorBoard logging.')
+flags.DEFINE_integer('log_freq', 10, 'Number of batch to write log.',
+                     lower_bound=1)
+
 flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
 flags.DEFINE_integer('update_freq', 1, 'Update frequency.')
 flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
-
-
-class Spinner(object):
-    __base__ = u'↖↗↘↙'
-
-    def __generator_fn__(self):
-        counter = 0
-        base = str(self.__base__)
-        base_length = len(base)
-
-        while True:
-            yield base[counter]
-            counter += 1
-
-            # Avoid counter overflow for long running process
-            if counter % base_length == 0:
-                counter = 0
-
-    def __init__(self):
-        super().__init__()
-        self.__generator__ = self.__generator_fn__()
-
-    def __str__(self):
-        return next(self.__generator__)
-    __repr__ = __str__
 
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
@@ -74,40 +53,13 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     from tensorflow.python.keras import callbacks as C
     from tensorflow.python.estimator.estimator import ModeKeys
 
+    from callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
+
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
         FLAGS.checkpoint_dir = f'{model_name}_ckpt'
     if FLAGS.state_file is None:
         FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, '_state.hdf5')
-
-    nan = float('nan')
-    spinner = Spinner() if FLAGS.decorate else ''
-
-    class SimpleLogger(C.Callback):
-        """A simple end-of-epoch logger."""
-
-        def on_batch_end(self, batch, logs=None):
-            if FLAGS.update_freq and batch % FLAGS.update_freq != 0:
-                return
-            logs = logs or {}
-            loss = logs.get('loss')
-            print(f' {spinner} loss {loss:.4f}\r', end='')
-
-        def on_epoch_end(self, epoch, logs=None):
-            logs = logs or {}
-            loss = logs.get('loss', nan)
-            val_loss = logs.get('val_loss', nan)
-            print(f'Epoch {epoch + 1} - '
-                  f'loss: {loss:.4f}  '
-                  f'val loss: {val_loss:.4f}\r')
-
-    class SaveStateCallback(C.Callback):
-        def __init__(self, state_file):
-            super().__init__()
-            self.state_file = state_file
-
-        def on_epoch_end(self, epoch, logs=None):
-            self.model.save(self.state_file)
 
     logging.info('Calling `input_fn` to generate dataset')
     data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
@@ -115,11 +67,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     train_dataset = data_fn(ModeKeys.TRAIN)
     vali_dataset = data_fn(ModeKeys.EVAL)
     test_dataset = data_fn(ModeKeys.PREDICT)
-
-    ckpt_path = os.path.join(
-        FLAGS.checkpoint_dir,
-        'epoch_{epoch}_{val_loss:.4f}.ckpt')
-    latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
@@ -144,32 +91,14 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     if FLAGS.summary:
         model.summary()
 
-    if FLAGS.load_weights:
-        if latest_checkpoint is not None:
-            logging.info('Restoring model weights from latest checkpoint "%s"',
-                         latest_checkpoint)
-            try:
-                model.load_weights(latest_checkpoint)
-            except ValueError:
-                logging.error('Latest checkpoint at "%s" not compatible with '
-                              'current model structure.', latest_checkpoint)
-        else:
-            logging.warning('Latest checkpoint not found at dir "%s", '
-                            'will initialize model weights as defined in '
-                            '`model_fn`.', FLAGS.checkpoint_dir)
-
     if not model.optimizer:
         logging.info('Compilling model optimizer and loss function')
         model.compile(optimizer, loss_fn)
 
-    ckpt_callback = C.ModelCheckpoint(
-        ckpt_path,
-        save_best_only=True,
-        save_weights_only=True)
-
-    logging.info('Calculating `val_loss` with current model state')
-    ckpt_callback.best = model.evaluate(vali_dataset, verbose=0)
-    logging.info('Current val_loss: %.3f', ckpt_callback.best)
+    ckpt_callback = ModelCheckpoint(
+        FLAGS.checkpoint_dir, val_dataset=vali_dataset,
+        save_best_only=True, max_to_keep=5,
+        load_weights_on_model_set=FLAGS.load_weights)
 
     if FLAGS.save_state:
         save_state = [SaveStateCallback(FLAGS.state_file)]
@@ -184,6 +113,15 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     else:
         early_stopping = []
 
+    if FLAGS.tensorboard:
+        tfb = [C.TensorBoard(
+            log_dir=FLAGS.checkpoint_dir,
+            histogram_freq=0, write_graph=True,
+            write_images=False, update_freq=FLAGS.batch_size * FLAGS.log_freq,
+            profile_batch=0)]
+    else:
+        tfb = []
+
     logging.info('Begin training process')
     try:
         model.fit(
@@ -193,7 +131,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
                 C.TerminateOnNaN(),
                 ckpt_callback,
                 SimpleLogger()
-            ] + early_stopping + save_state)
+            ] + early_stopping + save_state + tfb)
     except KeyboardInterrupt:
         pass
     finally:
