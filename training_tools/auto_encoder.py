@@ -83,7 +83,8 @@ def model_fn():
     return model
 
 
+_loss_fn = tf.losses.SparseCategoricalCrossentropy(True)
+
+
 def loss_fn(a, b):
-    return tf.keras.losses.sparse_categorical_crossentropy(
-        a, b, True
-    )
+    return _loss_fn(a, b)
