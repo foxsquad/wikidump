@@ -14,8 +14,9 @@ flags.DEFINE_integer('batch_size', 100, 'Batch size of input data.',
 flags.DEFINE_float('learning_rate', 1e-4, '\
 Initial learning rate for new optimizer, used when \
 a new optimizer is created.', lower_bound=1e-10, short_name='lr')
-flags.DEFINE_integer('patience', 3, 'EarlyStopping callback patience value.',
-                     lower_bound=1)
+flags.DEFINE_integer('patience', 3, 'EarlyStopping callback patience value. '
+                     'Use 0 to disable early stopping feature.',
+                     lower_bound=0)
 
 flags.DEFINE_integer('buffer', 1000, 'Shuffle buffer value for train dataset.',
                      lower_bound=1)
@@ -75,11 +76,9 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
-        FLAGS.checkpoint_dir = '{model_name}_ckpt'.format(
-            model_name=model_name)
+        FLAGS.checkpoint_dir = f'{model_name}_ckpt'
     if FLAGS.state_file is None:
-        FLAGS.state_file = os.path.join(
-            FLAGS.checkpoint_dir, '_state.h5')
+        FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, '_state.hdf5')
 
     nan = float('nan')
     spinner = Spinner() if FLAGS.decorate else ''
@@ -124,6 +123,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
+    model = None
     if FLAGS.load_state:
         logging.info('Loading model from last state file "%s"',
                      FLAGS.state_file)
@@ -135,14 +135,11 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             logging.error(e)
             logging.error('Failed to load model from last state, '
                           'will construct a blank model instead.')
-            model = model_fn()
         except OSError as e:
             logging.error(e)
             logging.error('Last state file not found,'
                           ' will construct a blank model.')
-            model = model_fn()
-    else:
-        model = model_fn()
+    model = model or model_fn()
 
     if FLAGS.summary:
         model.summary()
@@ -179,20 +176,24 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     else:
         save_state = []
 
+    if FLAGS.patience:
+        early_stopping = [C.EarlyStopping(
+            monitor='val_loss',
+            patience=FLAGS.patience,
+            restore_best_weights=True)]
+    else:
+        early_stopping = []
+
     logging.info('Begin training process')
     try:
         model.fit(
             train_dataset, validation_data=vali_dataset,
             epochs=FLAGS.epochs, verbose=FLAGS.v,
             callbacks=[
-                C.EarlyStopping(
-                    monitor='val_loss',
-                    patience=FLAGS.patience,
-                    restore_best_weights=True),
                 C.TerminateOnNaN(),
                 ckpt_callback,
                 SimpleLogger()
-            ] + save_state)
+            ] + early_stopping + save_state)
     except KeyboardInterrupt:
         pass
     finally:
