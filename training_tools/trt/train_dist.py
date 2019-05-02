@@ -22,7 +22,7 @@ flags.DEFINE_integer('taskindex', None,
 flags.DEFINE_boolean('repeat', False, '\
 Repeat dataset on distributed training. Note that this flag \
 does not have effect on local training process. This flag is \
-intended for indefinite traning on distributed system.')
+intended for indefinite training on distributed system.')
 
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
@@ -69,16 +69,14 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     input_fn = input_fn(batch_size, shuffle_buffer, shuffle_seed)
 
     # Prepare distributed strategy
-    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy(
-        tf.distribute.experimental.CollectiveCommunication.RING
-    )
+    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
     config = tf.estimator.RunConfig(
         tf_random_seed=tf_random_seed,
         train_distribute=strategy,
         eval_distribute=strategy,
         model_dir=model_dir,
         save_checkpoints_steps=save_checkpoints_steps)
-    classsifier = tf.estimator.Estimator(
+    classifier = tf.estimator.Estimator(
         model_fn=model_fn_wrapper(model_fn, loss_fn),
         config=config)
 
@@ -87,7 +85,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     try:
         tf.estimator.train_and_evaluate(
-            classsifier,
+            classifier,
             train_spec=train_spec,
             eval_spec=eval_spec)
     except KeyboardInterrupt:

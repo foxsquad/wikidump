@@ -3,10 +3,10 @@
 import os.path
 import sys
 
-from absl import app, flags
+from absl import app, flags, logging
 from absl.flags import argparse_flags
 
-from default import PLUGINS
+from trt.default import PLUGINS
 FLAGS = flags.FLAGS
 
 
@@ -22,7 +22,11 @@ for plugin in PLUGINS:
 
 def patch_mkl():
     import ctypes
-    from win32 import win32api
+    try:
+        from win32 import win32api
+    except ImportError:
+        logging.warning('Module win32 not found, couldd not patch DLL.')
+        return
     try:
         import _thread as thread
     except ImportError:

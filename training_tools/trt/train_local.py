@@ -51,9 +51,8 @@ flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
     from tensorflow.python.keras import callbacks as C
-    from tensorflow.python.estimator.estimator import ModeKeys
 
-    from callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
+    from trt.callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
 
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
@@ -64,9 +63,9 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     logging.info('Calling `input_fn` to generate dataset')
     data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
 
-    train_dataset = data_fn(ModeKeys.TRAIN)
-    vali_dataset = data_fn(ModeKeys.EVAL)
-    test_dataset = data_fn(ModeKeys.PREDICT)
+    train_dataset = data_fn(tf.estimator.ModeKeys.TRAIN)
+    val_dataset = data_fn(tf.estimator.ModeKeys.EVAL)
+    test_dataset = data_fn(tf.estimator.ModeKeys.PREDICT)
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
@@ -92,11 +91,11 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         model.summary()
 
     if not model.optimizer:
-        logging.info('Compilling model optimizer and loss function')
+        logging.info('Compiling model optimizer and loss function')
         model.compile(optimizer, loss_fn)
 
     ckpt_callback = ModelCheckpoint(
-        FLAGS.checkpoint_dir, val_dataset=vali_dataset,
+        FLAGS.checkpoint_dir, val_dataset=val_dataset,
         save_best_only=True, max_to_keep=5,
         load_weights_on_model_set=FLAGS.load_weights)
 
@@ -117,15 +116,15 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         tfb = [C.TensorBoard(
             log_dir=FLAGS.checkpoint_dir,
             histogram_freq=0, write_graph=True,
-            write_images=False, update_freq=FLAGS.batch_size * FLAGS.log_freq,
-            profile_batch=0)]
+            write_images=False,
+            update_freq=FLAGS.batch_size * FLAGS.log_freq)]
     else:
         tfb = []
 
     logging.info('Begin training process')
     try:
         model.fit(
-            train_dataset, validation_data=vali_dataset,
+            train_dataset, validation_data=val_dataset,
             epochs=FLAGS.epochs, verbose=FLAGS.v,
             callbacks=[
                 C.TerminateOnNaN(),
