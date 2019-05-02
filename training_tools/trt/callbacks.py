@@ -2,7 +2,7 @@
 import tensorflow as tf
 from absl import logging
 from absl.flags import FLAGS
-from tensorflow.python.keras import callbacks as C
+from tensorflow.python.keras import callbacks
 
 
 class Spinner(object):
@@ -27,6 +27,7 @@ class Spinner(object):
 
     def __str__(self):
         return next(self.__generator__)
+
     __repr__ = __str__
 
 
@@ -34,7 +35,7 @@ nan = float('nan')
 spinner = Spinner() if FLAGS.decorate else ''
 
 
-class SimpleLogger(C.Callback):
+class SimpleLogger(callbacks.Callback):
     """A simple end-of-epoch logger."""
 
     def on_batch_end(self, batch, logs=None):
@@ -53,16 +54,16 @@ class SimpleLogger(C.Callback):
               f'val loss: {val_loss:.4f}\r')
 
 
-class SaveStateCallback(C.Callback):
+class SaveStateCallback(callbacks.Callback):
     def __init__(self, state_file):
         super().__init__()
         self.state_file = state_file
 
     def on_epoch_end(self, epoch, logs=None):
-        self.model.save(self.state_file)
+        tf.keras.models.save_model(self.model, self.state_file, True, True)
 
 
-class ModelCheckpoint(C.Callback):
+class ModelCheckpoint(callbacks.Callback):
     """Checkpoint manager and monitor."""
 
     def __init__(self, ckpt_dir, val_dataset=None,
@@ -112,12 +113,12 @@ class ModelCheckpoint(C.Callback):
 
         if self.val_dataset:
             logging.info('New model set, updating best val_loss with dataset')
-            self.best = model.evaluate(self.val_dataset, verbose=0)
+            self.best = self.model.evaluate(self.val_dataset, verbose=0)
             logging.info('Current val_loss: %.3f', self.best)
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
-        val_loss = logs.get('val_loss', nan)
+        val_loss = logs.get('val_loss', None)
 
-        if self.manager and val_loss < self.best:
+        if self.manager and val_loss is not None and val_loss < self.best:
             self.manager.save(epoch)

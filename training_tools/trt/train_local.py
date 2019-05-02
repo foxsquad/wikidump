@@ -6,15 +6,16 @@ from absl import flags, logging
 
 FLAGS = flags.FLAGS
 
-
 flags.DEFINE_integer('epochs', 10, 'Number of epochs to train.',
                      lower_bound=1, short_name='e')
 flags.DEFINE_integer('batch_size', 100, 'Batch size of input data.',
                      lower_bound=1, short_name='b')
-flags.DEFINE_float('learning_rate', 1e-4, '\
-Initial learning rate for new optimizer, used when \
-a new optimizer is created.', lower_bound=1e-10, short_name='lr')
-flags.DEFINE_integer('patience', 3, 'EarlyStopping callback patience value. '
+flags.DEFINE_float('learning_rate', 1e-4,
+                   'Initial learning rate for new optimizer, used when '
+                   'a new optimizer is created.',
+                   lower_bound=1e-10, short_name='lr')
+flags.DEFINE_integer('patience', 3,
+                     'EarlyStopping callback patience value. '
                      'Use 0 to disable early stopping feature.',
                      lower_bound=0)
 
@@ -22,20 +23,23 @@ flags.DEFINE_integer('buffer', 1000, 'Shuffle buffer value for train dataset.',
                      lower_bound=1)
 flags.DEFINE_integer('seed', None, 'Shuffle random seed.')
 
-flags.DEFINE_string('checkpoint_dir', None, 'Directory to save checkpoint. '
-                    'Default value for checkpoint directory is '
-                    '"{model-name}_ckpt".')
-flags.DEFINE_bool('save_state', True, 'Whether to save training state. '
-                  'The optimizer state will be loaded from this file.',
+flags.DEFINE_string('checkpoint_dir', None,
+                    'Directory to save checkpoint. Default value for '
+                    'checkpoint directory is "{model-name}_ckpt".')
+flags.DEFINE_bool('save_state', True,
+                  'Whether to save training state. The optimizer state '
+                  'will be loaded from this file.',
                   short_name='s')
-flags.DEFINE_string('state_file', None, 'Path to save state file. '
-                    'Default value for state file is '
-                    '"{checkpoint_dir}/_state.h5".')
-flags.DEFINE_bool('load_state', True, 'Resume training process with best '
+flags.DEFINE_string('state_file', None,
+                    'Path to save state file. Default value for state file is '
+                    '"{checkpoint_dir}/state.h5".')
+flags.DEFINE_bool('load_state', True,
+                  'Resume training process with best '
                   'effort. Last train state will be loaded from saved state, '
                   'otherwise a new optimizer will be compiled with learning '
                   'rate defined in "--learning-rate".')
-flags.DEFINE_bool('load_weights', True, 'Load weights from latest available '
+flags.DEFINE_bool('load_weights', True,
+                  'Load weights from latest available '
                   'checkpoint, otherwise weights will be initialized with '
                   'default value in `model_fn`.')
 
@@ -50,15 +54,14 @@ flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
-    from tensorflow.python.keras import callbacks as C
 
-    from trt.callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
+    from .callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
 
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
         FLAGS.checkpoint_dir = f'{model_name}_ckpt'
     if FLAGS.state_file is None:
-        FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, '_state.hdf5')
+        FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, 'state.hdf5')
 
     logging.info('Calling `input_fn` to generate dataset')
     data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
@@ -78,13 +81,13 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
                 FLAGS.state_file,
                 custom_objects={'loss_fn': loss_fn})
         except ValueError as e:
-            logging.error(e)
+            logging.error('ValueError: %s', e)
             logging.error('Failed to load model from last state, '
                           'will construct a blank model instead.')
         except OSError as e:
-            logging.error(e)
-            logging.error('Last state file not found,'
-                          ' will construct a blank model.')
+            logging.error('OSError: %s', e)
+            logging.error('Last state file not found, will construct '
+                          'a blank model.')
     model = model or model_fn()
 
     if FLAGS.summary:
@@ -94,50 +97,43 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         logging.info('Compiling model optimizer and loss function')
         model.compile(optimizer, loss_fn)
 
-    ckpt_callback = ModelCheckpoint(
-        FLAGS.checkpoint_dir, val_dataset=val_dataset,
-        save_best_only=True, max_to_keep=5,
-        load_weights_on_model_set=FLAGS.load_weights)
+    callbacks = [
+        tf.keras.callbacks.TerminateOnNaN(),
+        ModelCheckpoint(
+            FLAGS.checkpoint_dir, val_dataset=val_dataset,
+            save_best_only=True, max_to_keep=5,
+            load_weights_on_model_set=FLAGS.load_weights),
+        SimpleLogger()]
 
     if FLAGS.save_state:
-        save_state = [SaveStateCallback(FLAGS.state_file)]
-    else:
-        save_state = []
+        callbacks.append(SaveStateCallback(FLAGS.state_file))
 
     if FLAGS.patience:
-        early_stopping = [C.EarlyStopping(
+        callbacks.append(tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
             patience=FLAGS.patience,
-            restore_best_weights=True)]
-    else:
-        early_stopping = []
+            restore_best_weights=True))
 
     if FLAGS.tensorboard:
-        tfb = [C.TensorBoard(
+        callbacks.append(tf.keras.callbacks.TensorBoard(
             log_dir=FLAGS.checkpoint_dir,
             histogram_freq=0, write_graph=True,
             write_images=False,
-            update_freq=FLAGS.batch_size * FLAGS.log_freq)]
-    else:
-        tfb = []
+            update_freq=FLAGS.batch_size * FLAGS.log_freq))
 
     logging.info('Begin training process')
     try:
         model.fit(
             train_dataset, validation_data=val_dataset,
             epochs=FLAGS.epochs, verbose=FLAGS.v,
-            callbacks=[
-                C.TerminateOnNaN(),
-                ckpt_callback,
-                SimpleLogger()
-            ] + early_stopping + save_state + tfb)
+            callbacks=callbacks)
     except KeyboardInterrupt:
         pass
     finally:
         logging.info('Train process done.')
         if FLAGS.save_state:
             logging.info('Saving current training state')
-            model.save(FLAGS.state_file)
+            tf.keras.models.save_model(model, FLAGS.state_file)
 
     ev_test = model.evaluate(test_dataset, verbose=0)
     logging.info('[on test dataset] test_loss = %.4f', ev_test)
