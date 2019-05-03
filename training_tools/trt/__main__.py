@@ -8,12 +8,12 @@ from absl import app, flags, logging
 from absl.flags import argparse_flags
 
 from trt.default import PLUGINS
-FLAGS = flags.FLAGS
 
+FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('distributed', False, '\
 Enable distributed training. Currently, this will use the \
-multiworker distributed strategy with estimator training \
+multi worker distributed strategy with estimator training \
 loop.')
 flags.DEFINE_string('config', None, 'Config file to read from.')
 
@@ -26,7 +26,7 @@ def patch_mkl():
     try:
         from win32 import win32api
     except ImportError:
-        logging.warning('Module win32 not found, couldd not patch DLL.')
+        logging.warning('Module win32api not found, could not patch DLL.')
         return
     try:
         import _thread as thread
@@ -90,9 +90,9 @@ def main(argv):
     train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
-def local_config(argv=('',), **kwargs):
+def local_config(argv=('',), **_):
     parser = argparse_flags.ArgumentParser(
-        prog='trainingtool',
+        prog='trt',
         description='A TensorFlow training bootstrap tool.')
 
     parser.add_argument('model_module_name', metavar='MODEL_MODULE',
@@ -103,13 +103,13 @@ def local_config(argv=('',), **kwargs):
         loss_fn(y_true, y_pred)''')
     parser.add_argument('remained', metavar='...', nargs='...',
                         help='Additional flags that might be passed to '
-                        'model module.')
+                             'model module.')
 
     arg0 = argv[0] if argv else ''
     ns = parser.parse_args(argv[1:])  # Strip binary name from argv
 
     # Load the model_module
-    model_name, model_fn, input_fn, loss_fn =\
+    model_name, model_fn, input_fn, loss_fn = \
         validate_model_module(ns.model_module_name)
     # Update FLAGS after we load the model module, as model module
     # might defined it own flag(s)
@@ -136,7 +136,7 @@ def read_config_file():
 
 if __name__ == "__main__":
     # Add current working directory to system search paths
-    # before atempt any import statement
+    # before attempt any import statement
     sys.path.insert(0, os.path.abspath(os.path.curdir))
 
     app.call_after_init(read_config_file)
