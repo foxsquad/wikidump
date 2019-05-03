@@ -3,6 +3,7 @@
 import os.path
 import sys
 
+import yaml
 from absl import app, flags, logging
 from absl.flags import argparse_flags
 
@@ -14,7 +15,7 @@ flags.DEFINE_boolean('distributed', False, '\
 Enable distributed training. Currently, this will use the \
 multiworker distributed strategy with estimator training \
 loop.')
-
+flags.DEFINE_string('config', None, 'Config file to read from.')
 
 for plugin in PLUGINS:
     flags.adopt_module_key_flags(plugin)
@@ -117,9 +118,26 @@ def local_config(argv=('',), **kwargs):
     return [arg0, model_name, model_fn, input_fn, loss_fn]
 
 
+def read_config_file():
+    """Read config as defined in `config` file.
+
+    Note that any value specified here will be preceded by
+    manually CLI arguments."""
+    # Locate the config file in the arguments
+    if FLAGS.config and os.path.exists(FLAGS.config):
+        with open(FLAGS.config) as f:
+            config = yaml.safe_load(f)
+
+        # Update default values with the values in the config file
+        for k, v in config.items():
+            if hasattr(FLAGS, k):
+                FLAGS.set_default(k, v)
+
+
 if __name__ == "__main__":
     # Add current working directory to system search paths
     # before atempt any import statement
     sys.path.insert(0, os.path.abspath(os.path.curdir))
 
+    app.call_after_init(read_config_file)
     app.run(main, flags_parser=local_config)
