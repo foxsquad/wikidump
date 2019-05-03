@@ -63,6 +63,10 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     if FLAGS.state_file is None:
         FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, 'state.hdf5')
 
+    # Ensure that checkpoint dir exist before we move on
+    if not os.path.exists(FLAGS.checkpoint_dir):
+        os.makedirs(FLAGS.checkpoint_dir, mode=0o766)
+
     logging.info('Calling `input_fn` to generate dataset')
     data_fn = input_fn(FLAGS.batch_size, FLAGS.buffer, FLAGS.seed)
 
@@ -116,9 +120,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     if FLAGS.tensorboard:
         callbacks.append(tf.keras.callbacks.TensorBoard(
-            log_dir=FLAGS.checkpoint_dir,
-            histogram_freq=0, write_graph=True,
-            write_images=False,
+            log_dir=FLAGS.checkpoint_dir, histogram_freq=1,
+            write_graph=True, write_images=False,
             update_freq=FLAGS.batch_size * FLAGS.log_freq))
 
     logging.info('Begin training process')
@@ -129,6 +132,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             callbacks=callbacks)
     except KeyboardInterrupt:
         pass
+    except ValueError as e:
+        logging.error('ValueError: %s', e)
     finally:
         logging.info('Train process done.')
         if FLAGS.save_state:
