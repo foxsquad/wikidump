@@ -19,6 +19,25 @@ flags.DEFINE_integer('taskindex', None,
                      'Task index, as defined in --configfile.',
                      lower_bound=0, short_name='i')
 
+# Args for repeatable distributed training
+flags.DEFINE_integer('shuffle_buffer', 10000,
+                     'Buffer value for dataset shuffle action.')
+flags.DEFINE_integer('shuffle_seed', None,
+                     'Shuffle seed value. Unspecified means no seed.')
+flags.DEFINE_integer('tf_random_seed', None,
+                     'TensorFlow random seed. Unspecified means no seed.')
+flags.DEFINE_integer('step_counter_freq', None,
+                     'Step counter frequency. Must be a positive integer '
+                     'if specified.', lower_bound=1)
+flags.DEFINE_integer('save_checkpoints_freq', 1000,
+                     'Save checkpoint frequency, counted as global steps. '
+                     'Note that saving too frequently might caught slow '
+                     'in training progress',
+                     lower_bound=1)
+flags.DEFINE_string('model_dir', 'model_dir',
+                    'Model directory, to save checkpoint and TensorBoard '
+                    'event file.')
+
 flags.DEFINE_boolean('repeat', False, '\
 Repeat dataset on distributed training. Note that this flag \
 does not have effect on local training process. This flag is \
@@ -41,15 +60,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         configs = yaml.load(
             f.read(), Loader=yaml.SafeLoader)  # type: dict
 
-    batch_size = configs.get('batch_size', 100)
-    shuffle_buffer = configs.get('shuffle_buffer', 1000)
-    shuffle_seed = configs.get('shuffle_seed', None)
-    tf_random_seed = configs.get('tf_random_seed', None)
-    step_counter_freq = configs.get('step_counter_freq', None)
-
-    model_dir = configs.get('model_dir', 'model_dir')
-    save_checkpoints_steps = configs.get('save_checkpoints_steps', 1000)
-
     tf_config = {
         'cluster': configs['cluster'],
         'task': {
@@ -62,23 +72,29 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     hooks = []
 
-    if step_counter_freq and step_counter_freq > 0:
-        hooks += [tf.estimator.StepCounterHook(
-            every_n_steps=step_counter_freq)]
+    if FLAGS.step_counter_freq:
+        hooks.append(tf.estimator.StepCounterHook(
+            every_n_steps=FLAGS.step_counter_freq))
 
-    input_fn = input_fn(batch_size, shuffle_buffer, shuffle_seed)
+    input_fn = input_fn(FLAGS.batch_size, FLAGS.shuffle_buffer, FLAGS.shuffle_seed)
 
     # Prepare distributed strategy
     strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
     config = tf.estimator.RunConfig(
-        tf_random_seed=tf_random_seed,
+        tf_random_seed=FLAGS.tf_random_seed,
         train_distribute=strategy,
         eval_distribute=strategy,
-        model_dir=model_dir,
-        save_checkpoints_steps=save_checkpoints_steps)
-    classifier = tf.estimator.Estimator(
-        model_fn=model_fn_wrapper(model_fn, loss_fn),
-        config=config)
+        model_dir=FLAGS.model_dir,
+        save_checkpoints_steps=FLAGS.save_checkpoints_freq)
+    # classifier = tf.estimator.Estimator(
+    #     model_fn=model_fn_wrapper(model_fn, loss_fn),
+    #     config=config)
+    model = model_fn()
+    model.compile(
+        loss=loss_fn,
+        optimizer=tf.compat.v1.train.AdamOptimizer(FLAGS.learning_rate))
+    classifier = tf.keras.estimator.model_to_estimator(
+        keras_model=model, config=config)
 
     train_spec = tf.estimator.TrainSpec(input_fn=input_fn, hooks=hooks)
     eval_spec = tf.estimator.EvalSpec(input_fn=input_fn)
@@ -131,4 +147,5 @@ def model_fn_wrapper(model_fn, loss_fn):
         optimizer_op = optimizer.minimize(loss, global_step)
         return tf.estimator.EstimatorSpec(
             mode=mode, loss=loss, train_op=optimizer_op)
+
     return wrapper

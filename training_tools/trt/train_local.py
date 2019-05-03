@@ -122,7 +122,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         callbacks.append(tf.keras.callbacks.TensorBoard(
             log_dir=FLAGS.checkpoint_dir, histogram_freq=1,
             write_graph=True, write_images=False,
-            update_freq=FLAGS.batch_size * FLAGS.log_freq))
+            update_freq=FLAGS.batch_size * FLAGS.log_freq,
+            profile_batch=0))
 
     logging.info('Begin training process')
     try:

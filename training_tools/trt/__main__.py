@@ -123,15 +123,27 @@ def read_config_file():
 
     Note that any value specified here will be preceded by
     manually CLI arguments."""
+
+    def update_flags_default(config_data):
+        for k, v in config_data.items():
+            if hasattr(FLAGS, k):
+                FLAGS.set_default(k, v)
+
+    # Automatic load default expected file first
+    expected_file = 'trt.yml'
+    if os.path.exists(expected_file):
+        logging.info('Settings default value from %s', expected_file)
+        with open(expected_file) as f:
+            config = yaml.safe_load(f)
+        # Update default values with the values in the config file
+        update_flags_default(config)
+
     # Locate the config file in the arguments
     if FLAGS.config and os.path.exists(FLAGS.config):
         with open(FLAGS.config) as f:
             config = yaml.safe_load(f)
 
-        # Update default values with the values in the config file
-        for k, v in config.items():
-            if hasattr(FLAGS, k):
-                FLAGS.set_default(k, v)
+        update_flags_default(config)
 
 
 if __name__ == "__main__":
