@@ -2,7 +2,7 @@
 import tensorflow as tf
 from absl import logging
 from absl.flags import FLAGS
-from tensorflow.python.keras import callbacks
+from tensorflow.python.keras.callbacks import Callback
 
 
 class Spinner(object):
@@ -35,7 +35,7 @@ nan = float('nan')
 spinner = Spinner() if FLAGS.decorate else ''
 
 
-class SimpleLogger(callbacks.Callback):
+class SimpleLogger(Callback):
     """A simple end-of-epoch logger."""
 
     def on_batch_end(self, batch, logs=None):
@@ -49,12 +49,11 @@ class SimpleLogger(callbacks.Callback):
         logs = logs or {}
         loss = logs.get('loss', nan)
         val_loss = logs.get('val_loss', nan)
-        print(f'Epoch {epoch + 1} - '
-              f'loss: {loss:.4f}  '
-              f'val loss: {val_loss:.4f}\r')
+        logging.info('Epoch %d - loss: %.4f  val_loss: %.4f',
+                     epoch+1, loss, val_loss)
 
 
-class SaveStateCallback(callbacks.Callback):
+class SaveStateCallback(Callback):
     def __init__(self, state_file):
         super().__init__()
         self.state_file = state_file
@@ -63,7 +62,7 @@ class SaveStateCallback(callbacks.Callback):
         tf.keras.models.save_model(self.model, self.state_file, True, True)
 
 
-class ModelCheckpoint(callbacks.Callback):
+class ModelCheckpoint(Callback):
     """Checkpoint manager and monitor."""
 
     def __init__(self, ckpt_dir, val_dataset=None,
