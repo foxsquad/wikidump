@@ -3,12 +3,6 @@ from collections import namedtuple
 
 from absl import flags
 
-from . import train_dist, train_local
-
-Plugins = namedtuple('Plugins', ['local', 'distributed'])
-
-PLUGINS = Plugins(train_local, train_dist)
-
 
 flags.DEFINE_integer('batch_size', 100, 'Batch size of input data.',
                      lower_bound=1, short_name='b')
@@ -23,3 +17,7 @@ flags.DEFINE_integer('shuffle_seed', None,
                      'Shuffle seed value. Unspecified means no seed.')
 flags.DEFINE_integer('tf_random_seed', None,
                      'TensorFlow random seed. Unspecified means no seed.')
+
+from . import train_local, train_dist  # noqa, nosort
+Plugins = namedtuple('Plugins', ['local', 'distributed'])
+PLUGINS = Plugins(train_local, train_dist)

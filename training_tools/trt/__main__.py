@@ -7,9 +7,6 @@ import yaml
 from absl import app, flags, logging
 from absl.flags import argparse_flags
 
-from . import default
-from .default import PLUGINS
-
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('distributed', False, '\
@@ -17,6 +14,12 @@ Enable distributed training. Currently, this will use the \
 multi worker distributed strategy with estimator training \
 loop.')
 flags.DEFINE_string('config', None, 'Config file to read from.')
+
+
+# Import these pre-defined module later to keep main module flags
+# appears first.
+from . import default  # noqa, nosort
+from .default import PLUGINS  # noqa, nosort
 
 flags.adopt_module_key_flags(default)
 for plugin in PLUGINS:
@@ -95,7 +98,7 @@ def main(argv):
     train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
-def local_config(argv=('',), **_):
+def flags_parser(argv=('',), **_):
     parser = argparse_flags.ArgumentParser(
         prog='trt',
         description='A TensorFlow training bootstrap tool.')
@@ -157,4 +160,4 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.abspath(os.path.curdir))
 
     app.call_after_init(read_config_file)
-    app.run(main, flags_parser=local_config)
+    app.run(main, flags_parser=flags_parser)
