@@ -7,7 +7,8 @@ import yaml
 from absl import app, flags, logging
 from absl.flags import argparse_flags
 
-from trt.default import PLUGINS
+from . import default
+from .default import PLUGINS
 
 FLAGS = flags.FLAGS
 
@@ -17,6 +18,7 @@ multi worker distributed strategy with estimator training \
 loop.')
 flags.DEFINE_string('config', None, 'Config file to read from.')
 
+flags.adopt_module_key_flags(default)
 for plugin in PLUGINS:
     flags.adopt_module_key_flags(plugin)
 
@@ -82,10 +84,13 @@ def main(argv):
 
     # Select train loop function
     if FLAGS.distributed:
+        logging.info('Using distributed train loop.')
         m = PLUGINS.distributed
     else:
+        logging.info('Using local train loop')
         m = PLUGINS.local
 
+    logging.info('Starting train loop.')
     train_loop = m.train_loop
     train_loop(model_name, model_fn, input_fn, loss_fn)
 
@@ -98,9 +103,9 @@ def local_config(argv=('',), **_):
     parser.add_argument('model_module_name', metavar='MODEL_MODULE',
                         help='''\
         Model module name. The module must expose these functions with
-        compatible signature: model_fn(),
-        input_fn(batch_size, shuffle_buffer, shuffle_seed),
-        loss_fn(y_true, y_pred)''')
+        compatible signature: model_fn(), input_fn(mode, input_context),
+        loss_fn(y_true, y_pred). The signatures should compatible with
+        functions pass to `EstimatorSpec`.''')
     parser.add_argument('remained', metavar='...', nargs='...',
                         help='Additional flags that might be passed to '
                              'model module.')
