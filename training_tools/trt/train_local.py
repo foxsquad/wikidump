@@ -35,13 +35,12 @@ flags.DEFINE_bool('load_weights', True,
                   'default value in `model_fn`.')
 
 flags.DEFINE_bool('tensorboard', False, 'Enable TensorBoard logging.')
-flags.DEFINE_integer('log_freq', 10, 'Number of batch to write log.',
+flags.DEFINE_integer('log_freq', 10,
+                     'Number of batch to write Tensor Board event log.',
                      lower_bound=1)
 flags.DEFINE_bool('cleanup', True,
                   'Try to remove old tfevents files from last run.')
 
-flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
-flags.DEFINE_integer('update_freq', 1, 'Update frequency.')
 flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
 
 
