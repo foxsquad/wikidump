@@ -69,33 +69,14 @@ def validate_model_module(name):
     import importlib
 
     model_module = importlib.import_module(name)
-    model_fn = model_module.model_fn
-    input_fn = model_module.input_fn
-    loss_fn = model_module.loss_fn
+    assert hasattr(model_module, 'model_fn'), 'missing model_fn in %s' % name
+    assert hasattr(model_module, 'input_fn'), 'missing input_fn in %s' % name
+    assert hasattr(model_module, 'loss_fn'), 'missing loss_fn in %s' % name
 
     _name = model_module.__name__
     model_name = _name.split('.')[-1] if '.' in _name else _name
 
-    return model_name, model_fn, input_fn, loss_fn
-
-
-def main(argv):
-    *argv, model_name, model_fn, input_fn, loss_fn = argv
-
-    if 'win32' in sys.platform:
-        patch_mkl()
-
-    # Select train loop function
-    if FLAGS.distributed:
-        logging.info('Using distributed train loop.')
-        m = PLUGINS.distributed
-    else:
-        logging.info('Using local train loop')
-        m = PLUGINS.local
-
-    logging.info('Starting train loop.')
-    train_loop = m.train_loop
-    train_loop(model_name, model_fn, input_fn, loss_fn)
+    return model_name, model_module
 
 
 def flags_parser(argv=('',), **_):
@@ -117,13 +98,12 @@ def flags_parser(argv=('',), **_):
     ns = parser.parse_args(argv[1:])  # Strip binary name from argv
 
     # Load the model_module
-    model_name, model_fn, input_fn, loss_fn = \
-        validate_model_module(ns.model_module_name)
+    model_name, mm = validate_model_module(ns.model_module_name)
     # Update FLAGS after we load the model module, as model module
     # might defined it own flag(s)
     FLAGS([arg0] + ns.remained)
 
-    return [arg0, model_name, model_fn, input_fn, loss_fn]
+    return [arg0, model_name, mm.model_fn, mm.input_fn, mm.loss_fn]
 
 
 def read_config_file():
@@ -152,6 +132,25 @@ def read_config_file():
             config = yaml.safe_load(f)
 
         update_flags_default(config)
+
+
+def main(argv):
+    *argv, model_name, model_fn, input_fn, loss_fn = argv
+
+    if 'win32' in sys.platform:
+        patch_mkl()
+
+    # Select train loop function
+    if FLAGS.distributed:
+        logging.info('Using distributed train loop.')
+        m = PLUGINS.distributed
+    else:
+        logging.info('Using local train loop')
+        m = PLUGINS.local
+
+    logging.info('Starting train loop.')
+    train_loop = m.train_loop
+    train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
 if __name__ == "__main__":
