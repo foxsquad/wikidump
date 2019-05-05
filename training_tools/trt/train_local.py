@@ -55,6 +55,11 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         FLAGS.checkpoint_dir = f'{model_name}_ckpt'
     if FLAGS.state_file is None:
         FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, 'state.hdf5')
+    if FLAGS.prefetch is None:
+        # Enable prefetch automaticaly on GPU-enabled machine and prefetch
+        # argument was not specified.
+        if tf.test.is_gpu_available():
+            FLAGS.prefetch = True
 
     # Ensure that checkpoint dir exist before we move on
     if not os.path.exists(FLAGS.checkpoint_dir):
@@ -65,6 +70,10 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     train_dataset = input_fn(tf.estimator.ModeKeys.TRAIN)
     val_dataset = input_fn(tf.estimator.ModeKeys.EVAL)
     test_dataset = input_fn(tf.estimator.ModeKeys.PREDICT)
+
+    if FLAGS.prefetch:
+        train_dataset = train_dataset.prefetch(FLAGS.batch_size * 2)
+        val_dataset = val_dataset.prefetch(FLAGS.batch_size * 2)
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 

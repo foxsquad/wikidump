@@ -17,6 +17,7 @@ flags.DEFINE_integer('shuffle_seed', None,
                      'Shuffle seed value. Unspecified means no seed.')
 flags.DEFINE_integer('tf_random_seed', None,
                      'TensorFlow random seed. Unspecified means no seed.')
+flags.DEFINE_bool('prefetch', None, 'Enable data prefetch on CPU.')
 
 from . import train_local, train_dist  # noqa, nosort
 Plugins = namedtuple('Plugins', ['local', 'distributed'])
