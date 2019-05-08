@@ -1,6 +1,4 @@
 """Default plugin loader for training bootstrap tool."""
-from collections import namedtuple
-
 from absl import flags
 
 
@@ -19,6 +17,11 @@ flags.DEFINE_integer('tf_random_seed', None,
                      'TensorFlow random seed. Unspecified means no seed.')
 flags.DEFINE_bool('prefetch', None, 'Enable data prefetch on CPU.')
 
-from . import train_local, train_dist  # noqa, nosort
-Plugins = namedtuple('Plugins', ['local', 'distributed'])
-PLUGINS = Plugins(train_local, train_dist)
+
+class PLUGINS(object):
+    # Import plugin modules later to avoid flag definitions
+    # in these modules come after default flags above.
+    from . import train_dist, train_local
+
+    local = train_local
+    distributed = train_dist

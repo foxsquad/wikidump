@@ -1,0 +1,9 @@
+summary: true
+# Do not enable resume behavior here
+save_state: false
+load_state: false
+load_weights: false
+# temporary disable early stopping behavior
+patience: 0
+# Cleanup old tfevents files
+cleanup: true

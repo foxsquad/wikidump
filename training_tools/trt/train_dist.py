@@ -108,15 +108,15 @@ def model_fn_wrapper(model_fn, loss_fn):
         model = model_fn()
 
         if not isinstance(model, tf.keras.Model):
-            import inspect
+            from inspect import getmro
 
-            mro_tree = inspect.getmro(type(model))
+            mro_tree = getmro(type(model))
 
             raise ValueError(
                 'Output of `model_fn` is not in supported type. '
                 'The `model_fn` is expected to return an instance of '
                 'Keras Model or its subclass. The inheritance tree of '
-                'output is: %s' % ' > '.join(mro_tree))
+                'output is: %s' % ' > '.join(map(str, mro_tree)))
 
         logits = model(features, training=False)
 

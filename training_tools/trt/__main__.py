@@ -33,10 +33,7 @@ def patch_mkl():
     except ImportError:
         logging.warning('Module win32api not found, could not patch DLL.')
         return
-    try:
-        import _thread as thread
-    except ImportError:
-        import thread
+    import _thread as thread
 
     try:
         # Load the DLL manually to ensure its handler gets
@@ -64,19 +61,44 @@ def patch_mkl():
         print('Patch failed.')
 
 
+class ModelModule(object):
+    """Wrapper for model module.
+
+    Avoid excessively access to other members in imported module.
+    """
+
+    def __init__(self, module):
+        name = module.__name__
+        assert hasattr(module, 'model_fn'), 'missing model_fn in %s' % name
+        assert hasattr(module, 'input_fn'), 'missing input_fn in %s' % name
+        assert hasattr(module, 'loss_fn'), 'missing loss_fn in %s' % name
+        self._module = module
+        self._name = name.split('.')[-1] if '.' in name else name
+
+    @property
+    def model_fn(self):
+        return self._module.model_fn
+
+    @property
+    def input_fn(self):
+        return self._module.input_fn
+
+    @property
+    def loss_fn(self):
+        return self._module.loss_fn
+
+    @property
+    def name(self):
+        return self._name
+
+
 def validate_model_module(name):
     """Validate model module availability."""
     import importlib
 
-    model_module = importlib.import_module(name)
-    assert hasattr(model_module, 'model_fn'), 'missing model_fn in %s' % name
-    assert hasattr(model_module, 'input_fn'), 'missing input_fn in %s' % name
-    assert hasattr(model_module, 'loss_fn'), 'missing loss_fn in %s' % name
-
-    _name = model_module.__name__
-    model_name = _name.split('.')[-1] if '.' in _name else _name
-
-    return model_name, model_module
+    _model_module = importlib.import_module(name)
+    model_module = ModelModule(_model_module)
+    return model_module
 
 
 def flags_parser(argv=('',), **_):
@@ -97,13 +119,13 @@ def flags_parser(argv=('',), **_):
     arg0 = argv[0] if argv else ''
     ns = parser.parse_args(argv[1:])  # Strip binary name from argv
 
-    # Load the model_module
-    model_name, mm = validate_model_module(ns.model_module_name)
+    # Load and validate `model_module`
+    mm = validate_model_module(ns.model_module_name)
     # Update FLAGS after we load the model module, as model module
     # might defined it own flag(s)
     FLAGS([arg0] + ns.remained)
 
-    return [arg0, model_name, mm.model_fn, mm.input_fn, mm.loss_fn]
+    return arg0, mm.name, mm.model_fn, mm.input_fn, mm.loss_fn
 
 
 def read_config_file():
