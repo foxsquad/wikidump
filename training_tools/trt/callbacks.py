@@ -58,8 +58,31 @@ class SaveStateCallback(Callback):
         super().__init__()
         self.state_file = state_file
 
+    def set_model(self, model):
+        super().set_model(model)
+
+        # Try to serialize model configuration.
+        # If this action fail, then the model could not be safely
+        # serialized using keras method, as it's contructed with
+        # arbitrary python code, although the model weights can
+        # be saved by TensorFlow API.
+        try:
+            model.get_config()
+        except NotImplementedError:
+            logging.error(
+                'Could not load model config with ordinary method. '
+                'Model state could not be saved.')
+            logging.warning(
+                'Only Keras Sequential or Functional model '
+                'could be safely saved using this callback.')
+
+            self.on_epoch_end = self._null_action
+
     def on_epoch_end(self, epoch, logs=None):
         tf.keras.models.save_model(self.model, self.state_file, True, True)
+
+    def _null_action(self, epoch, logs=None):
+        return
 
 
 class ModelCheckpoint(Callback):

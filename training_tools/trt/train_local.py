@@ -77,6 +77,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     optimizer = tf.keras.optimizers.Adam(FLAGS.learning_rate)
 
+    logging.info('Calling `model_fn` to create model')
     model = None
     if FLAGS.load_state:
         logging.info('Loading model from last state file "%s"',
@@ -142,9 +143,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         logging.error('ValueError: %s', e)
     finally:
         logging.info('Train process done.')
-        if FLAGS.save_state:
-            logging.info('Saving current training state')
-            tf.keras.models.save_model(model, FLAGS.state_file)
 
     ev_test = model.evaluate(test_dataset, verbose=0)
     logging.info('[on test dataset] test_loss = %.4f', ev_test)
