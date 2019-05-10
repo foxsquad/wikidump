@@ -2,7 +2,7 @@
 import tensorflow as tf
 from absl import logging
 from absl.flags import FLAGS
-from tensorflow.python.keras import callbacks
+from tensorflow.python.keras.callbacks import Callback
 
 
 class Spinner(object):
@@ -35,7 +35,7 @@ nan = float('nan')
 spinner = Spinner() if FLAGS.decorate else ''
 
 
-class SimpleLogger(callbacks.Callback):
+class SimpleLogger(Callback):
     """A simple end-of-epoch logger."""
 
     def on_batch_end(self, batch, logs=None):
@@ -49,21 +49,43 @@ class SimpleLogger(callbacks.Callback):
         logs = logs or {}
         loss = logs.get('loss', nan)
         val_loss = logs.get('val_loss', nan)
-        print(f'Epoch {epoch + 1} - '
-              f'loss: {loss:.4f}  '
-              f'val loss: {val_loss:.4f}\r')
+        logging.info('Epoch %d - loss: %.4f  val_loss: %.4f',
+                     epoch+1, loss, val_loss)
 
 
-class SaveStateCallback(callbacks.Callback):
+class SaveStateCallback(Callback):
     def __init__(self, state_file):
         super().__init__()
         self.state_file = state_file
 
+    def set_model(self, model):
+        super().set_model(model)
+
+        # Try to serialize model configuration.
+        # If this action fail, then the model could not be safely
+        # serialized using keras method, as it's contructed with
+        # arbitrary python code, although the model weights can
+        # be saved by TensorFlow API.
+        try:
+            model.get_config()
+        except NotImplementedError:
+            logging.error(
+                'Could not load model config with ordinary method. '
+                'Model state could not be saved.')
+            logging.warning(
+                'Only Keras Sequential or Functional model '
+                'could be safely saved using this callback.')
+
+            self.on_epoch_end = self._null_action
+
     def on_epoch_end(self, epoch, logs=None):
         tf.keras.models.save_model(self.model, self.state_file, True, True)
 
+    def _null_action(self, epoch, logs=None):
+        return
 
-class ModelCheckpoint(callbacks.Callback):
+
+class ModelCheckpoint(Callback):
     """Checkpoint manager and monitor."""
 
     def __init__(self, ckpt_dir, val_dataset=None,

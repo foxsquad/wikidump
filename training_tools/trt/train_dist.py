@@ -20,12 +20,6 @@ flags.DEFINE_integer('taskindex', None,
                      lower_bound=0, short_name='i')
 
 # Args for repeatable distributed training
-flags.DEFINE_integer('shuffle_buffer', 10000,
-                     'Buffer value for dataset shuffle action.')
-flags.DEFINE_integer('shuffle_seed', None,
-                     'Shuffle seed value. Unspecified means no seed.')
-flags.DEFINE_integer('tf_random_seed', None,
-                     'TensorFlow random seed. Unspecified means no seed.')
 flags.DEFINE_integer('step_counter_freq', None,
                      'Step counter frequency. Must be a positive integer '
                      'if specified.', lower_bound=1)
@@ -36,12 +30,9 @@ flags.DEFINE_integer('save_checkpoints_freq', 1000,
                      lower_bound=1)
 flags.DEFINE_string('model_dir', 'model_dir',
                     'Model directory, to save checkpoint and TensorBoard '
-                    'event file.')
+                    'event files.')
 
-flags.DEFINE_boolean('repeat', False, '\
-Repeat dataset on distributed training. Note that this flag \
-does not have effect on local training process. This flag is \
-intended for indefinite training on distributed system.')
+flags.DEFINE_boolean('repeat', False, 'Repeat dataset when training.')
 
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
@@ -75,8 +66,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     if FLAGS.step_counter_freq:
         hooks.append(tf.estimator.StepCounterHook(
             every_n_steps=FLAGS.step_counter_freq))
-
-    input_fn = input_fn(FLAGS.batch_size, FLAGS.shuffle_buffer, FLAGS.shuffle_seed)
 
     # Prepare distributed strategy
     strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
@@ -119,15 +108,15 @@ def model_fn_wrapper(model_fn, loss_fn):
         model = model_fn()
 
         if not isinstance(model, tf.keras.Model):
-            import inspect
+            from inspect import getmro
 
-            mro_tree = inspect.getmro(type(model))
+            mro_tree = getmro(type(model))
 
             raise ValueError(
                 'Output of `model_fn` is not in supported type. '
                 'The `model_fn` is expected to return an instance of '
                 'Keras Model or its subclass. The inheritance tree of '
-                'output is: %s' % ' > '.join(mro_tree))
+                'output is: %s' % ' > '.join(map(str, mro_tree)))
 
         logits = model(features, training=False)
 

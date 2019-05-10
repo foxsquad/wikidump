@@ -11,7 +11,7 @@ flags.DEFINE_integer('train_articles', 10,
 dataset_path = 'first-1000.sqlite3'
 
 
-def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
+def input_fn(mode, input_context=None):
     """A simple dataset builder function.
 
     This function creates a simple dataset for traning the
@@ -33,39 +33,36 @@ def input_fn(batch_size, shuffle_buffer, shuffle_seed=None):
         x = tf.expand_dims(x, axis=-1)
         return x, x
 
-    def wrapper(mode, input_context=None):
-        base = tf.data.experimental.SqlDataset(
-            'sqlite', dataset_path,
-            'select content from wiki_text',
-            tf.string)
-        train_dataset = base.skip(5).take(FLAGS.train_articles)
-        val_dataset = base.take(1)
-        test_dataset = base.skip(1).take(1)
+    base = tf.data.experimental.SqlDataset(
+        'sqlite', dataset_path,
+        'select content from wiki_text',
+        tf.string)
+    train_dataset = base.skip(5).take(FLAGS.train_articles)
+    val_dataset = base.take(1)
+    test_dataset = base.skip(1).take(1)
 
-        if mode == tf.estimator.ModeKeys.TRAIN:
-            d = train_dataset
-        elif mode == tf.estimator.ModeKeys.EVAL:
-            d = val_dataset
-        else:  # Assum test here
-            d = test_dataset
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        d = train_dataset
+    elif mode == tf.estimator.ModeKeys.EVAL:
+        d = val_dataset
+    else:
+        d = test_dataset
 
-        if input_context:
-            d = d.apply(tf.data.experimental.filter_for_shard(
-                input_context.num_input_pipelines,
-                input_context.input_pipeline_id))
-        d = d.flat_map(to_sequence) \
-            .apply(tf.data.experimental.map_and_batch(
-                to_tuple, batch_size, drop_remainder=True))
+    if input_context:
+        d = d.apply(tf.data.experimental.filter_for_shard(
+            input_context.num_input_pipelines,
+            input_context.input_pipeline_id))
+    d = d.flat_map(to_sequence) \
+        .apply(tf.data.experimental.map_and_batch(
+            to_tuple, FLAGS.batch_size, drop_remainder=True))
 
-        if FLAGS.repeat:
-            d = d.apply(tf.data.experimental.shuffle_and_repeat(
-                shuffle_buffer, None, shuffle_seed))
-        else:
-            d = d.shuffle(shuffle_buffer, shuffle_seed)
+    if FLAGS.repeat:
+        d = d.apply(tf.data.experimental.shuffle_and_repeat(
+            FLAGS.shuffle_buffer, None, FLAGS.shuffle_seed))
+    else:
+        d = d.shuffle(FLAGS.shuffle_buffer, FLAGS.shuffle_seed)
 
-        return d
-
-    return wrapper
+    return d
 
 
 def model_fn():

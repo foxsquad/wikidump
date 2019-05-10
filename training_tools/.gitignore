@@ -1,0 +1,12 @@
+# Ignore default checkpoint for testing purpose
+*_ckpt/
+# Ignore bazel toolchain dir
+bazel-*/
+# Log files and directories
+*log/
+*logs/
+*.log
+# Cached TFRecords files
+*.tfrecord
+# Generic database files
+*db
