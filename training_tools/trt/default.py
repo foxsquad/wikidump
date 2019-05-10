@@ -18,10 +18,23 @@ flags.DEFINE_integer('tf_random_seed', None,
 flags.DEFINE_bool('prefetch', None, 'Enable data prefetch on CPU.')
 
 
-class PLUGINS(object):
+class Plugins(object):
     # Import plugin modules later to avoid flag definitions
     # in these modules come after default flags above.
     from . import train_dist, train_local
 
     local = train_local
     distributed = train_dist
+
+    def __iter__(self):
+        for i in [self.local, self.distributed]:
+            yield i
+
+
+PLUGINS = Plugins()
+
+
+# These are for callback configs
+flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
+flags.DEFINE_integer('update_freq', 1,
+                     'Train status logger update frequency, in epoch count.')

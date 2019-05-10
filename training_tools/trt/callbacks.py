@@ -1,12 +1,8 @@
 """Custom Keras callback style for local training."""
 import tensorflow as tf
-from absl import flags, logging
+from absl import logging
 from absl.flags import FLAGS
 from tensorflow.python.keras.callbacks import Callback
-
-flags.DEFINE_bool('decorate', False, 'Enable console decoration.')
-flags.DEFINE_integer('update_freq', 1,
-                     'Train status logger update frequency, in epoch count.')
 
 
 class Spinner(object):
