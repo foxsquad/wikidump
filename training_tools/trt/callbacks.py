@@ -43,14 +43,14 @@ class SimpleLogger(Callback):
             return
         logs = logs or {}
         loss = logs.get('loss')
-        print(f' {spinner} loss {loss:.4f}\r', end='')
+        print(f' {spinner} batch {batch}: loss {loss:.4f}\r', end='')
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         loss = logs.get('loss', nan)
         val_loss = logs.get('val_loss', nan)
         logging.info('Epoch %d - loss: %.4f  val_loss: %.4f',
-                     epoch+1, loss, val_loss)
+                     epoch + 1, loss, val_loss)
 
 
 class SaveStateCallback(Callback):
@@ -63,7 +63,7 @@ class SaveStateCallback(Callback):
 
         # Try to serialize model configuration.
         # If this action fail, then the model could not be safely
-        # serialized using keras method, as it's contructed with
+        # serialized using keras method, as it's constructed with
         # arbitrary python code, although the model weights can
         # be saved by TensorFlow API.
         try:
@@ -105,10 +105,7 @@ class ModelCheckpoint(Callback):
     def set_model(self, model):
         super().set_model(model)
 
-        self.saver = tf.train.Checkpoint(
-            model=self.model,
-            # optimizer=model.optimizer
-        )
+        self.saver = tf.train.Checkpoint(model=self.model)
         self.manager = tf.train.CheckpointManager(
             self.saver,
             directory=self.ckpt_dir,
@@ -136,7 +133,9 @@ class ModelCheckpoint(Callback):
         if self.val_dataset:
             logging.info('New model set, updating best val_loss with dataset')
             self.best = self.model.evaluate(self.val_dataset, verbose=0)
-            logging.info('Current val_loss: %.3f', self.best)
+            if isinstance(self.best, list):
+                self.best = self.best[-1]
+            logging.info('Current val_loss: %.4f', self.best)
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}

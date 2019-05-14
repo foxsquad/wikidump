@@ -145,6 +145,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         logging.info('Train process done.')
 
     ev_test = model.evaluate(test_dataset, verbose=0)
+    if isinstance(ev_test, list):
+        ev_test = ev_test[-1]
     logging.info('[on test dataset] test_loss = %.4f', ev_test)
 
 
