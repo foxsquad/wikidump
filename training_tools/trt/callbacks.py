@@ -74,7 +74,9 @@ class SaveStateCallback(Callback):
                 'Model state could not be saved.')
             logging.warning(
                 'Only Keras Sequential or Functional model '
-                'could be safely saved using this callback.')
+                'could be safely saved using this callback. '
+                'Model weights can still be saved normally '
+                'with checkpoint callback.')
 
             self.on_epoch_end = self._null_action
 
@@ -134,6 +136,7 @@ class ModelCheckpoint(Callback):
             logging.info('New model set, updating best val_loss with dataset')
             self.best = self.model.evaluate(self.val_dataset, verbose=0)
             if isinstance(self.best, list):
+                logging.info('Raw val_loss: %s', self.best)
                 self.best = self.best[-1]
             logging.info('Current val_loss: %.4f', self.best)
 
