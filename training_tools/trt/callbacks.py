@@ -144,5 +144,9 @@ class ModelCheckpoint(Callback):
         logs = logs or {}
         val_loss = logs.get('val_loss', None)
 
-        if self.manager and val_loss is not None and val_loss < self.best:
-            self.manager.save(epoch)
+        try:
+            if self.manager and val_loss is not None and val_loss < self.best:
+                self.manager.save(epoch)
+        except Exception as e:
+            logging.warning('Skip saving checkpoint due to error')
+            logging.error(e)
