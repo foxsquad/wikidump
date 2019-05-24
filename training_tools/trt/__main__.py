@@ -18,8 +18,9 @@ flags.DEFINE_bool('summary-only', False, 'Load model and print summary only.')
 
 # Import these pre-defined module later to keep main module flags
 # appears first.
-from . import default  # noqa, nosort
-from .default import PLUGINS  # noqa, nosort
+from . import default  # noqa isort:skip
+from .default import PLUGINS  # noqa isort:skip
+
 
 flags.adopt_module_key_flags(default)
 for plugin in PLUGINS:
