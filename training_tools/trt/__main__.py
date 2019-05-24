@@ -205,10 +205,14 @@ def main(argv):
     train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
-if __name__ == "__main__":
+def cli():
     # Add current working directory to system search paths
     # before attempt any import statement
     sys.path.insert(0, os.path.abspath(os.path.curdir))
 
     app.call_after_init(read_config_file)
     app.run(main, flags_parser=flags_parser)
+
+
+if __name__ == "__main__":
+    cli()
