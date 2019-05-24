@@ -1,5 +1,12 @@
 from setuptools import setup
 
+
+_entry_points = '''\
+[console_scripts]
+trt=trt.__main__:cli
+ptb=trt.tensorboard:cli
+'''
+
 setup(
     name='trt',
     version='1.0.0-rc1',
@@ -20,10 +27,7 @@ setup(
         'pyyaml',
         'pandas',
     ],
-    entry_points='''
-        [console_scripts]
-        trt=trt.__main__:cli
-    ''',
+    entry_points=_entry_points,
     classifiers=[
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
