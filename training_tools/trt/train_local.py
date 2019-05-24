@@ -44,7 +44,7 @@ flags.DEFINE_integer('log_freq', 10,
 flags.DEFINE_bool('cleanup', True,
                   'Try to remove old tfevents files from last run.')
 
-flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
+flags.DEFINE_bool('summary', False, 'Print out model summary after create.')
 
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
@@ -59,13 +59,13 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     # Add run sub-dir
     if FLAGS.run:
         FLAGS.checkpoint_dir = os.path.join(FLAGS.checkpoint_dir, FLAGS.run)
+    # Build state file
     if FLAGS.state_file is None:
         FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, 'state.hdf5')
-    if FLAGS.prefetch is None:
-        # Enable prefetch automaticaly on GPU-enabled machine and prefetch
-        # argument was not specified.
-        if tf.test.is_gpu_available():
-            FLAGS.prefetch = True
+    # If prefetch argument was not specified and this machine
+    # has capable GPU, then enable it for better input pipeline.
+    if FLAGS.prefetch is None and tf.test.is_gpu_available():
+        FLAGS.prefetch = True
 
     # Ensure that checkpoint dir exist before we move on
     if not os.path.exists(FLAGS.checkpoint_dir):
