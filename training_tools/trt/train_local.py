@@ -44,8 +44,6 @@ flags.DEFINE_integer('log_freq', 10,
 flags.DEFINE_bool('cleanup', True,
                   'Try to remove old tfevents files from last run.')
 
-flags.DEFINE_bool('summary', False, 'Print out model summary after create.')
-
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
@@ -105,9 +103,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             logging.error('Last state file not found, will construct '
                           'a blank model.')
     model = model or model_fn()  # type: Model
-
-    if FLAGS.summary and model.built:
-        model.summary()
 
     if not model.optimizer:
         logging.info('Compiling model optimizer and loss function')
