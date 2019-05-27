@@ -23,9 +23,7 @@ setup(
         'keras_preprocessing>=1.0.5',
         'numpy',
         'six',
-        'maxminddb',
-        'pyyaml',
-        'pandas',
+        'pyyaml'
     ],
     entry_points=_entry_points,
     classifiers=[
