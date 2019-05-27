@@ -143,7 +143,7 @@ def read_config_file():
     # Automatic load default expected file first
     expected_file = 'trt.yml'
     if os.path.exists(expected_file):
-        logging.info('Settings default value from %s', expected_file)
+        logging.info('Setting default value from %s', expected_file)
         with open(expected_file) as f:
             config = yaml.safe_load(f)
         # Update default values with the values in the config file
