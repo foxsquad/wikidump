@@ -49,6 +49,10 @@ flags.DEFINE_bool('summary', False, 'Print out model summary after create.')
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
+
+    # Initialize random seed before we call any subsequence functions.
+    tf.random.set_seed(FLAGS.tf_random_seed)
+
     from tensorflow.python.keras.models import Model
 
     from .callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
