@@ -15,7 +15,7 @@ setup(
     license='MIT',
     long_description='Collective training tools using native TensorFlow loop.',
     packages=['trt'],
-    python_require='>3.6, <4.0.0',
+    python_requires='>3.6, <4.0.0',
     install_requires=[
         'absl-py>=0.7.0',
         'tensorflow>=2.0.0a0',
