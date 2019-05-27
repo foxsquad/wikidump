@@ -137,7 +137,7 @@ class ModelCheckpoint(Callback):
             self.best = self.model.evaluate(self.val_dataset, verbose=0)
             if isinstance(self.best, list):
                 logging.info('Raw val_loss: %s', self.best)
-                self.best = self.best[-1]
+                self.best = self.best[0]
             logging.info('Current val_loss: %.4f', self.best)
 
     def on_epoch_end(self, epoch, logs=None):
