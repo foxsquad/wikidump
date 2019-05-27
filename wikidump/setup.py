@@ -5,7 +5,7 @@ wikidump processor
 
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='wikidump',
@@ -14,9 +14,9 @@ setup(
     description='A utility for processing wikidump archive',
     license='MIT',
     long_description='',
-    packages=['wikidump'],
+    packages=find_packages(),
     zip_safe=True,
-    python_require='>3.4, <4.0.0',
+    python_requires='>3.4, <4.0.0',
     install_requires=[
         'mwparserfromhell==0.5.2',
         'lxml~=4.3.2',
