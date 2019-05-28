@@ -2,6 +2,7 @@ import os
 
 import tensorflow as tf
 from absl import flags
+from tensorflow.python.eager import context as _context
 from tensorflow.python.keras import Model, initializers
 from tensorflow.python.keras.activations import sigmoid
 from tensorflow.python.keras.engine import InputSpec
@@ -17,17 +18,8 @@ TF_DATA_FILE = os.path.join(
     os.path.dirname(__file__),
     'data', 'node_cache.tfrecord')
 
-SEQ_SIZE = (
-    20   # 20 chars of caller ID
-    + 4  # 4 blocks of IPv4 address
-    + 3  # latitude, longtitude, accuracy radius
-    + 8  # packed timestamp, yy--, --yy, mm, dd, HH, MM, SS, ms
-    + 1  # delta time of the same caller
-)
 
 flags.DEFINE_integer('timesteps', 20, 'Train input sequence value')
-
-KERAS_F = 'KERAS_F' in os.environ and os.environ.get('KERAS_F', '')
 
 
 def fold_to_sequence(old_state, input_element):
@@ -141,18 +133,12 @@ class RNNBlock(Layer):
 
     def __init__(self, *args, **kwargs):
         super(RNNBlock, self).__init__(*args, **kwargs)
-        self.r1 = GRU(30, 'tanh', 'sigmoid',
-                      return_sequences=True)
-        self.r2 = GRU(30, 'tanh', 'sigmoid',
-                      return_sequences=True)
-        self.r3 = GRU(30, 'tanh', 'sigmoid',
-                      return_sequences=True)
-        self.r4 = GRU(30, 'tanh', 'sigmoid',
-                      return_sequences=True)
-        self.r5 = GRU(20, 'tanh', 'sigmoid',
-                      return_sequences=True)
-        self.r6 = GRU(10, 'tanh', 'sigmoid',
-                      return_sequences=True)
+        self.r1 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
+        self.r2 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
+        self.r3 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
+        self.r4 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
+        self.r5 = GRU(20, 'tanh', 'sigmoid', return_sequences=True)
+        self.r6 = GRU(10, 'tanh', 'sigmoid', return_sequences=True)
 
     def call(self, inputs, training=None):
         e = self.r1(inputs, training=training)
@@ -173,32 +159,17 @@ class DecoderChain(Layer):
     def __init__(self, output_dim=None, *args, **kwargs):
         super(DecoderChain, self).__init__(*args, **kwargs)
         assert output_dim is not None
-
-        k_reg = l2(0.001)
-        a_reg = l2(0.001)
-
-        k_init = initializers.GlorotNormalV2()
-        b_init = initializers.GlorotNormalV2()
-
-        self.d1 = Dense(20, 'relu',
-                        kernel_initializer=k_init,
-                        bias_initializer=b_init,
-                        kernel_regularizer=k_reg,
-                        activity_regularizer=a_reg,
-                        name='decoder_1')
-        self.d2 = Dense(30, 'relu',
-                        kernel_initializer=k_init,
-                        bias_initializer=b_init,
-                        kernel_regularizer=k_reg,
-                        activity_regularizer=a_reg,
-                        name='decoder_2')
-        self.d3 = Dense(output_dim,
-                        kernel_initializer=k_init,
-                        bias_initializer=b_init,
-                        kernel_regularizer=k_reg,
-                        activity_regularizer=a_reg,
-                        name='decoder_out')
         self.output_dim = output_dim
+
+        inits = dict(
+            kernel_initializer=initializers.GlorotNormalV2(),
+            bias_initializer=initializers.GlorotNormalV2(),
+            kernel_regularizer=l2(0.001),
+            activity_regularizer=l2(0.001)
+        )
+        self.d1 = Dense(20, 'relu', name='decoder_1', **inits)
+        self.d2 = Dense(30, 'relu', name='decoder_2', **inits)
+        self.d3 = Dense(output_dim, None, name='decoder_out', **inits)
 
     def call(self, inputs):
         d = self.d1(inputs)
@@ -274,3 +245,26 @@ def model_fn():
 
 
 loss_fn = [loss_fn_decoded, loss_fn_score]
+
+
+# Here we find the SEQ_SIZE by evaluate a single entry in dataset,
+# assumed that the dataset is uniform by trusting the generate
+# function. This happen at the very end of import process for this
+# module and required some power.
+# The iterable interface on `Dataset` only available when eager
+# execution is enabled. It's on by default on TF-2.0, but not
+# for earlier versions.
+# It's simplier to run this small op with eager execution enabled.
+with _context.eager_mode():
+    _base = tf.data.TFRecordDataset(TF_DATA_FILE)
+    _base = _base.map(_parse_tensor)
+    for _i in _base.take(1):
+        break
+    _shape = tf.shape(_i)[0]
+    # This is the same as int and can be passed to TF functions
+    SEQ_SIZE = _shape.numpy()
+
+
+del _i
+del _base
+del _shape
