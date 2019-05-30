@@ -1,3 +1,9 @@
+"""Auto encoder used for wikidump process
+
+This is used to overcome slice op when using distributed training
+loop. Current collective op does not support index slice.
+"""
+
 import tensorflow as tf
 from absl import flags
 
