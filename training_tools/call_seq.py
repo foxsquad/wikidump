@@ -225,6 +225,35 @@ class CallSeq(Model):
 
         return [d, score]
 
+    def decision(self, inputs):
+        """Return decision value based on single or batched input.
+
+        The input tensor must be a sequence of information vector, encoded
+        using rule same as `input_fn` in this module::
+
+        ```
+            v_i = [ x_1, x_2, ..., x_n ]
+            s_i = [ v_1, v_2, ..., v_n ]
+            batched_v = [ s_1, s_2, ..., s_n ]
+        ```
+
+        The input tensor must have at least the shape of
+        `(seq_length, seq_size)`. `seq_size` can be evaluated automaticaly
+        by this module if we have trai dataset.
+
+        This model can work with arbitrary sequence length input(s).
+        """
+        shape = tf.shape(inputs)
+        if len(shape) == 2:
+            inputs = tf.expand_dims(inputs, axis=0)  # Add batch dimension
+
+        outputs = self(inputs, training=False)
+
+        if len(shape) == 2:
+            # Ouput a scalar value, as we received a single sequence.
+            return tf.squeeze(outputs, axis=0)
+        return outputs
+
 
 def loss_fn_decoded(y_true, y_pred):
     """Somewhat called mean absolute cosine similarity."""
