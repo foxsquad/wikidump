@@ -1,3 +1,4 @@
+import json
 import os
 
 import tensorflow as tf
@@ -188,26 +189,60 @@ class CallSeq(Model):
     so `keras.utils.plot_model()` might produce false result.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, ckpt_path=None, *args, **kwargs):
         super(CallSeq, self).__init__(*args, **kwargs)
-        self.input_layer = InputLayer(input_shape=(None, SEQ_SIZE))
+
+        if ckpt_path is None:
+            # Use inferred global value if not available.
+            seq_size = SEQ_SIZE
+        else:
+            ckpt_reader = tf.train.load_checkpoint(ckpt_path)
+            # Find the input config attribute
+            input_cfg = None
+            for name in ckpt_reader.get_variable_to_shape_map():
+                if 'input_layer' in name and 'OBJECT_CONFIG_JSON' in name:
+                    input_cfg = json.loads(ckpt_reader.get_tensor(name))
+                    break
+            assert (
+                input_cfg is not None
+                and 'config' in input_cfg
+                and 'batch_input_shape' in input_cfg['config']
+            ), (
+                'Checkpoint file in path %s does not contain config option '
+                'for input layer.' % ckpt_path
+            )
+            # Load seq_size from input_cfg
+            seq_size = input_cfg['config']['batch_input_shape'][-1]
+
+            # Load seq_size from input_cfg
+            batch_input_shape = input_cfg['config']['batch_input_shape']
+            seq_size = batch_input_shape[-1]
+
+        self.seq_size = seq_size
+
+        self.input_layer = InputLayer(input_shape=(None, seq_size))
         self.n = BatchNormalization(name='batch_norm')
         self.n2 = BatchNormalization(name='batch_norm_2')
 
-        self.decoder_chain = DecoderChain(SEQ_SIZE, name='decoder')
+        self.decoder_chain = DecoderChain(seq_size, name='decoder')
 
         self.rnns = RNNBlock(name='rnns')
         self.radi_check = RadiusScoreLayer(1.0, name='score')
 
-        self._network_nodes = {
+        self._network_nodes = (
             self.input_layer, self.n, self.n2,
             self.decoder_chain,
             self.rnns, self.radi_check,
-        }
+        )
         self._feed_input_names = [self.input_layer.name]
         self._feed_output_names = [self.decoder_chain.name,
                                    self.radi_check.name]
         self._feed_loss_fns = [loss_fn_decoded, loss_fn_score]
+
+        self.build((None, None, seq_size))
+        if ckpt_path is not None:
+            saver = tf.train.Checkpoint(model=self)
+            saver.restore(tf.train.latest_checkpoint(ckpt_path))
 
     def call(self, inputs, training=None):
         e = self.input_layer(inputs)
