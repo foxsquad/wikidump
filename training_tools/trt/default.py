@@ -18,10 +18,12 @@ flags.DEFINE_integer('tf_random_seed', None,
 flags.DEFINE_bool('prefetch', None, 'Enable data prefetch on CPU.')
 
 
+# Import plugin modules later to avoid flag definitions
+# in these modules come after default flags above.
+from . import train_dist, train_local  # noqa  # isort:skip
+
+
 class Plugins(object):
-    # Import plugin modules later to avoid flag definitions
-    # in these modules come after default flags above.
-    from . import train_dist, train_local
 
     local = train_local
     distributed = train_dist

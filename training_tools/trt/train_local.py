@@ -35,17 +35,22 @@ flags.DEFINE_bool('load_weights', True,
                   'default value in `model_fn`.')
 
 flags.DEFINE_bool('tensorboard', False, 'Enable TensorBoard logging.')
+flags.DEFINE_string('run', None,
+                    'Optional run file. If exists, a sub directory will be '
+                    'created for this named-run.')
 flags.DEFINE_integer('log_freq', 10,
                      'Number of batch to write Tensor Board event log.',
                      lower_bound=1)
 flags.DEFINE_bool('cleanup', True,
                   'Try to remove old tfevents files from last run.')
 
-flags.DEFINE_bool('summary', False, 'Print out model summary after creation.')
-
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     import tensorflow as tf
+
+    # Initialize random seed before we call any subsequence functions.
+    tf.random.set_seed(FLAGS.tf_random_seed)
+
     from tensorflow.python.keras.models import Model
 
     from .callbacks import ModelCheckpoint, SaveStateCallback, SimpleLogger
@@ -53,13 +58,16 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
     # Process additional FLAGS
     if FLAGS.checkpoint_dir is None:
         FLAGS.checkpoint_dir = f'{model_name}_ckpt'
+    # Add run sub-dir
+    if FLAGS.run:
+        FLAGS.checkpoint_dir = os.path.join(FLAGS.checkpoint_dir, FLAGS.run)
+    # Build state file
     if FLAGS.state_file is None:
         FLAGS.state_file = os.path.join(FLAGS.checkpoint_dir, 'state.hdf5')
-    if FLAGS.prefetch is None:
-        # Enable prefetch automaticaly on GPU-enabled machine and prefetch
-        # argument was not specified.
-        if tf.test.is_gpu_available():
-            FLAGS.prefetch = True
+    # If prefetch argument was not specified and this machine
+    # has capable GPU, then enable it for better input pipeline.
+    if FLAGS.prefetch is None and tf.test.is_gpu_available():
+        FLAGS.prefetch = True
 
     # Ensure that checkpoint dir exist before we move on
     if not os.path.exists(FLAGS.checkpoint_dir):
@@ -95,9 +103,6 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
             logging.error('Last state file not found, will construct '
                           'a blank model.')
     model = model or model_fn()  # type: Model
-
-    if FLAGS.summary and model.built:
-        model.summary()
 
     if not model.optimizer:
         logging.info('Compiling model optimizer and loss function')
@@ -145,6 +150,8 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         logging.info('Train process done.')
 
     ev_test = model.evaluate(test_dataset, verbose=0)
+    if isinstance(ev_test, list):
+        ev_test = ev_test[-1]
     logging.info('[on test dataset] test_loss = %.4f', ev_test)
 
 

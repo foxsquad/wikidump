@@ -14,12 +14,13 @@ Enable distributed training. Currently, this will use the \
 multi worker distributed strategy with estimator training \
 loop.')
 flags.DEFINE_string('config', None, 'Config file to read from.')
-
+flags.DEFINE_bool('summary-only', False, 'Load model and print summary only.')
 
 # Import these pre-defined module later to keep main module flags
 # appears first.
-from . import default  # noqa, nosort
-from .default import PLUGINS  # noqa, nosort
+from . import default  # noqa isort:skip
+from .default import PLUGINS  # noqa isort:skip
+
 
 flags.adopt_module_key_flags(default)
 for plugin in PLUGINS:
@@ -142,7 +143,7 @@ def read_config_file():
     # Automatic load default expected file first
     expected_file = 'trt.yml'
     if os.path.exists(expected_file):
-        logging.info('Settings default value from %s', expected_file)
+        logging.info('Setting default value from %s', expected_file)
         with open(expected_file) as f:
             config = yaml.safe_load(f)
         # Update default values with the values in the config file
@@ -156,11 +157,41 @@ def read_config_file():
         update_flags_default(config)
 
 
+def print_summary(model_fn, input_fn):
+    """Try to print keras model summary."""
+    import tensorflow as tf
+
+    model = model_fn()
+    if model.built:
+        model.summary()
+    else:
+        logging.info('Model not built automatically.')
+        logging.info('Will feed model with some provided input data.')
+        dataset = input_fn(tf.estimator.ModeKeys.EVAL)
+        # Feed model with some input data, which we assumed that
+        # they are valid, as provided by model module.
+        for train_data, _ in dataset.take(1):
+            break
+        model(train_data, training=False)
+        model.summary()
+    try:
+        tf.keras.utils.plot_model(
+            model, f'{model.name}_io.png',
+            show_shapes=True)
+    except ImportError as e:
+        logging.error('Could not plot model graph.')
+        logging.error(e)
+
+
 def main(argv):
     *argv, model_name, model_fn, input_fn, loss_fn = argv
 
     if 'win32' in sys.platform:
         patch_mkl()
+
+    if FLAGS.get_flag_value('summary-only', False):
+        print_summary(model_fn, input_fn)
+        return 0
 
     # Select train loop function
     if FLAGS.distributed:
@@ -175,10 +206,14 @@ def main(argv):
     train_loop(model_name, model_fn, input_fn, loss_fn)
 
 
-if __name__ == "__main__":
+def cli():
     # Add current working directory to system search paths
     # before attempt any import statement
     sys.path.insert(0, os.path.abspath(os.path.curdir))
 
     app.call_after_init(read_config_file)
     app.run(main, flags_parser=flags_parser)
+
+
+if __name__ == "__main__":
+    cli()
