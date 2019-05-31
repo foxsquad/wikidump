@@ -4,13 +4,11 @@ import os
 import tensorflow as tf
 from absl import flags
 from tensorflow.python.eager import context as _context
-from tensorflow.python.keras import Model, initializers
+from tensorflow.python.keras import Model, initializers, losses, regularizers
 from tensorflow.python.keras.activations import sigmoid
 from tensorflow.python.keras.engine import InputSpec
 from tensorflow.python.keras.layers import GRU, \
     BatchNormalization, Dense, InputLayer, Layer
-from tensorflow.python.keras.losses import MAE
-from tensorflow.python.keras.regularizers import l2
 from tensorflow.python.ops import math_ops, nn
 
 FLAGS = flags.FLAGS
@@ -61,11 +59,11 @@ def input_fn(mode, input_context=None):
     # due to `init_state`, so we would skip those here.
     base = base.skip(FLAGS.timesteps)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        d = base.skip(400)
+        d = base.skip(10000)
     elif mode == tf.estimator.ModeKeys.EVAL:
-        d = base.take(200)
+        d = base.take(5000)
     else:
-        d = base.skip(200).take(200)
+        d = base.skip(5000).take(5000)
 
     if input_context:
         d = d.apply(tf.data.experimental.filter_for_shard(
@@ -99,14 +97,14 @@ class RadiusScoreLayer(Layer):
             'hyper_sphere_radius',
             shape=(), dtype=tf.float32,
             initializer=initializers.ConstantV2(self.init_radius),
-            regularizer=l2(0.01),
+            regularizer=regularizers.l2(0.01),
             trainable=True)
 
         self.center = self.add_weight(
             'hyper_sphere_center',
             shape=(self.dim, 1),
             initializer=initializers.GlorotUniformV2(),
-            regularizer=l2(0.001),
+            regularizer=regularizers.l2(0.001),
             trainable=True)
 
         super(RadiusScoreLayer, self).build(input_shape)
@@ -165,8 +163,8 @@ class DecoderChain(Layer):
         inits = dict(
             kernel_initializer=initializers.GlorotNormalV2(),
             bias_initializer=initializers.GlorotNormalV2(),
-            kernel_regularizer=l2(0.001),
-            activity_regularizer=l2(0.001)
+            kernel_regularizer=regularizers.l2(0.001),
+            activity_regularizer=regularizers.l2(0.001)
         )
         self.d1 = Dense(20, 'relu', name='decoder_1', **inits)
         self.d2 = Dense(30, 'relu', name='decoder_2', **inits)
@@ -231,8 +229,7 @@ class CallSeq(Model):
 
         self._network_nodes = (
             self.input_layer, self.n, self.n2,
-            self.decoder_chain,
-            self.rnns, self.radi_check,
+            self.decoder_chain, self.rnns, self.radi_check,
         )
         self._feed_input_names = [self.input_layer.name]
         self._feed_output_names = [self.decoder_chain.name,
@@ -260,7 +257,6 @@ class CallSeq(Model):
 
         return [d, score]
 
-    @tf.function
     def decision(self, inputs):
         """Return decision value based on single or batched input.
 
@@ -305,11 +301,11 @@ def loss_fn_decoded(y_true, y_pred):
 
 
 def loss_fn_score(y_true, y_pred):
-    return MAE(y_true, y_pred)
+    return losses.hinge(y_true, y_pred)
 
 
 def model_fn():
-    return CallSeq(name='call_seq_subclass')
+    return CallSeq(name='a_subclass_model')
 
 
 loss_fn = [loss_fn_decoded, loss_fn_score]
