@@ -38,12 +38,27 @@ spinner = Spinner() if FLAGS.decorate else ''
 class SimpleLogger(Callback):
     """A simple end-of-epoch logger."""
 
+    def __init__(self, *args, **kwargs):
+        super(SimpleLogger, self).__init__(*args, **kwargs)
+        self.batch_count = 0
+        self._modded = False
+
     def on_batch_end(self, batch, logs=None):
+        self.batch_count = batch
         if FLAGS.update_freq and batch % FLAGS.update_freq != 0:
             return
         logs = logs or {}
         loss = logs.get('loss')
         print(f' {spinner} batch {batch}: loss {loss:.4f}\r', end='')
+
+    def _on_batch_end(self, batch, logs=None):
+        if FLAGS.update_freq and batch % FLAGS.update_freq != 0:
+            return
+        logs = logs or {}
+        loss = logs.get('loss')
+        print(
+            f' {spinner} batch {batch}/{self.batch_count}: '
+            f'loss {loss:.4f}\r', end='')
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
@@ -51,6 +66,9 @@ class SimpleLogger(Callback):
         val_loss = logs.get('val_loss', nan)
         logging.info('Epoch %d - loss: %.4f  val_loss: %.4f',
                      epoch + 1, loss, val_loss)
+        if not self._modded and self.batch_count:
+            setattr(self, 'on_batch_end', self._on_batch_end)
+        self._modded = True
 
 
 class SaveStateCallback(Callback):
