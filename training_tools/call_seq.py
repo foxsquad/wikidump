@@ -36,7 +36,7 @@ def to_tuple(i):
             # decoder output
             i,
             # const value of possitive outcome
-            tf.constant(1.0, shape=(FLAGS.timesteps, 1))
+            tf.constant(1.0, shape=(FLAGS.timesteps, ))
         )
     )
 
@@ -82,13 +82,23 @@ def input_fn(mode, input_context=None):
 
 
 class RadiusScoreLayer(Layer):
+    """A simpler version of SVM on hyper-space.
+
+    The output of this layer is directly the decision values
+    of wheather data point(s) is inside or outside the hyper-
+    sphere surface.
+    """
+
     def __init__(self, init_radius=0.5, **kwargs):
         super(RadiusScoreLayer, self).__init__(**kwargs)
         self.init_radius = init_radius
 
     def build(self, input_shape):
-        # Hyper-space dimension size. This is the last dimension
-        # returns from recurent stack.
+        # Hyper-space dimension size, return from previous layer.
+        # We expect the input tensor has 3 dimentions and last one
+        # must available.
+        assert input_shape.ndims == 3
+        assert input_shape[-1] is not None
         self.dim = input_shape[-1]
 
         self.input_spec = InputSpec(axes={-1: self.dim})
@@ -102,7 +112,7 @@ class RadiusScoreLayer(Layer):
 
         self.center = self.add_weight(
             'hyper_sphere_center',
-            shape=(self.dim, 1),
+            shape=(self.dim, ),
             initializer=initializers.GlorotUniformV2(),
             regularizer=regularizers.l2(0.001),
             trainable=True)
@@ -110,15 +120,8 @@ class RadiusScoreLayer(Layer):
         super(RadiusScoreLayer, self).build(input_shape)
 
     def call(self, input_tensor):
-        i_shape = tf.shape(input_tensor)
-        x = tf.reshape(
-            input_tensor,
-            # This indicate a column vector of shape
-            # (batch_size, seq_size, vec_size, 1)
-            (i_shape[0], i_shape[1], self.dim, 1)
-        )
-        x = x - self.center
-        x = tf.norm(x, axis=-2)
+        x = input_tensor - self.center
+        x = tf.norm(x, axis=-1)
 
         # This is used to simulate soft-sign function,
         # which is a soft, continuous function and
@@ -255,7 +258,7 @@ class CallSeq(Model):
 
         score = self.radi_check(e_norm)
 
-        return [d, score]
+        return d, score
 
     def decision(self, inputs):
         """Return decision value based on single or batched input.
@@ -282,12 +285,12 @@ class CallSeq(Model):
         _, outputs = self(inputs, training=False)
 
         if len(shape) == 2:
-            # Ouput a scalar value, as we received a single sequence.
-            outputs = tf.squeeze(outputs, axis=(0, 2))
-        signed = tf.cast(tf.sign(outputs), tf.int32)
+            # Ouput a single vector, as we received a single sequence.
+            outputs = tf.squeeze(outputs, axis=0)
+        signs = tf.cast(tf.sign(outputs), tf.int32)
         if _context.executing_eagerly():
-            return signed.numpy()
-        return signed
+            return signs.numpy()
+        return signs
 
 
 def loss_fn_decoded(y_true, y_pred):
