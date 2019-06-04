@@ -73,20 +73,22 @@ class ModelModule(object):
         assert hasattr(module, 'model_fn'), 'missing model_fn in %s' % name
         assert hasattr(module, 'input_fn'), 'missing input_fn in %s' % name
         assert hasattr(module, 'loss_fn'), 'missing loss_fn in %s' % name
-        self._module = module
         self._name = name.split('.')[-1] if '.' in name else name
+        self._model_fn = module.model_fn
+        self._input_fn = module.input_fn
+        self._loss_fn = module.loss_fn
 
     @property
     def model_fn(self):
-        return self._module.model_fn
+        return self._model_fn
 
     @property
     def input_fn(self):
-        return self._module.input_fn
+        return self._input_fn
 
     @property
     def loss_fn(self):
-        return self._module.loss_fn
+        return self._loss_fn
 
     @property
     def name(self):
