@@ -7,6 +7,8 @@ import yaml
 from absl import app, flags, logging
 from absl.flags import argparse_flags
 
+from trt.input_tool import _wrap_input_fn
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('distributed', False, '\
@@ -75,7 +77,7 @@ class ModelModule(object):
         assert hasattr(module, 'loss_fn'), 'missing loss_fn in %s' % name
         self._name = name.split('.')[-1] if '.' in name else name
         self._model_fn = module.model_fn
-        self._input_fn = module.input_fn
+        self._input_fn = _wrap_input_fn(module.input_fn)
         self._loss_fn = module.loss_fn
 
     @property

@@ -32,8 +32,6 @@ flags.DEFINE_string('model_dir', 'model_dir',
                     'Model directory, to save checkpoint and TensorBoard '
                     'event files.')
 
-flags.DEFINE_boolean('repeat', False, 'Repeat dataset when training.')
-
 
 def train_loop(model_name, model_fn, input_fn, loss_fn):
     # Early exit, do not import tensorflow as early here.
@@ -46,6 +44,7 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
 
     # We are good to go here
     import tensorflow as tf
+    from tensorflow_estimator.python.estimator import keras as keras_est
 
     with open(FLAGS.configfile) as f:
         configs = yaml.load(
@@ -75,14 +74,12 @@ def train_loop(model_name, model_fn, input_fn, loss_fn):
         eval_distribute=strategy,
         model_dir=FLAGS.model_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_freq)
-    # classifier = tf.estimator.Estimator(
-    #     model_fn=model_fn_wrapper(model_fn, loss_fn),
-    #     config=config)
+
     model = model_fn()
     model.compile(
         loss=loss_fn,
         optimizer=tf.compat.v1.train.AdamOptimizer(FLAGS.learning_rate))
-    classifier = tf.keras.estimator.model_to_estimator(
+    classifier = keras_est.model_to_estimator(
         keras_model=model, config=config)
 
     train_spec = tf.estimator.TrainSpec(input_fn=input_fn, hooks=hooks)

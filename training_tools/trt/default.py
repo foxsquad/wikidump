@@ -13,6 +13,9 @@ flags.DEFINE_integer('shuffle_buffer', 10000,
                      'Buffer value for dataset shuffle action.')
 flags.DEFINE_integer('shuffle_seed', None,
                      'Shuffle seed value. Unspecified means no seed.')
+flags.DEFINE_boolean('repeat', False, 'Repeat dataset when training.')
+flags.DEFINE_integer('repeat_count', None, 'Repeat count on dataset.', 1)
+
 flags.DEFINE_integer('tf_random_seed', None,
                      'TensorFlow random seed. Unspecified means no seed.')
 flags.DEFINE_bool('prefetch', None, 'Enable data prefetch on CPU.')
