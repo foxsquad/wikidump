@@ -9,7 +9,7 @@ ptb=trt.tensorboard:cli
 
 setup(
     name='trt',
-    version='1.0.0-rc1',
+    version='1.0.0-rc2',
     author='Stoik',
     description='Collective training tools using native TensorFlow loop.',
     license='MIT',
