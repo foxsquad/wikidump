@@ -1,6 +1,7 @@
 import json
 import os
 
+import numpy as np
 import tensorflow as tf
 from absl import flags
 from tensorflow.python.eager import context as _context
@@ -285,6 +286,16 @@ class CallSeq(Model):
         if _context.executing_eagerly():
             return signs.numpy()
         return signs
+
+    __sig_to_text = {
+        np.int32(-1): 'BAD',
+        np.int32(0): 'UNKNOWN',
+        np.int32(1): 'OK'
+    }
+
+    @classmethod
+    def decision_to_text(cls, outputs):
+        return [cls._CallSeq__sig_to_text[i] for i in outputs]
 
 
 def loss_fn_decoded(y_true, y_pred):
