@@ -5,7 +5,7 @@ import tensorflow as tf
 from absl import flags
 from tensorflow.python.eager import context as _context
 from tensorflow.python.keras import Model, initializers, losses, regularizers
-from tensorflow.python.keras.activations import sigmoid
+from tensorflow.python.keras.activations import tanh
 from tensorflow.python.keras.engine import InputSpec
 from tensorflow.python.keras.layers import GRU, \
     BatchNormalization, Dense, InputLayer, Layer
@@ -46,37 +46,25 @@ def _parse_tensor(tensor):
     return x
 
 
-def input_fn(mode, input_context=None):
-    base = tf.data.TFRecordDataset(TF_DATA_FILE)
-    base = base.map(_parse_tensor)
+def input_fn(mode):
+    d = tf.data.TFRecordDataset(TF_DATA_FILE)
+    d = d.map(_parse_tensor)
     init_state = tf.constant(
         0, dtype=tf.float32,
         shape=(FLAGS.timesteps, SEQ_SIZE))
-    base = base.apply(tf.data.experimental.scan(
+    d = d.apply(tf.data.experimental.scan(
         init_state, fold_to_sequence))
 
     # The first `train_seq_window` of records is all zeros,
     # due to `init_state`, so we would skip those here.
-    base = base.skip(FLAGS.timesteps)
+    d = d.skip(FLAGS.timesteps)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        d = base.skip(10000)
+        d = d.skip(20000).take(10000)
     elif mode == tf.estimator.ModeKeys.EVAL:
-        d = base.take(5000)
+        d = d.take(10000)
     else:
-        d = base.skip(5000).take(5000)
-
-    if input_context:
-        d = d.apply(tf.data.experimental.filter_for_shard(
-            input_context.num_input_pipelines,
-            input_context.input_pipeline_id))
-    d = d.apply(tf.data.experimental.map_and_batch(
-        to_tuple, FLAGS.batch_size))
-
-    if FLAGS.repeat:
-        d = d.apply(tf.data.experimental.shuffle_and_repeat(
-            FLAGS.shuffle_buffer, None, FLAGS.shuffle_seed))
-    else:
-        d = d.shuffle(FLAGS.shuffle_buffer, FLAGS.shuffle_seed)
+        d = d.skip(10000).take(10000)
+    d = d.map(to_tuple)
 
     return d
 
@@ -123,10 +111,7 @@ class RadiusScoreLayer(Layer):
         x = input_tensor - self.center
         x = tf.norm(x, axis=-1)
 
-        # This is used to simulate soft-sign function,
-        # which is a soft, continuous function and
-        # differentiable at any point.
-        diff = sigmoid(self.radius ** 2 - x ** 2) * 2 - 1
+        diff = tanh(self.radius ** 2 - x ** 2)
         return diff
 
 
@@ -234,10 +219,14 @@ class CallSeq(Model):
             self.input_layer, self.n, self.n2,
             self.decoder_chain, self.rnns, self.radi_check,
         )
-        self._feed_input_names = [self.input_layer.name]
-        self._feed_output_names = [self.decoder_chain.name,
-                                   self.radi_check.name]
-        self._feed_loss_fns = [loss_fn_decoded, loss_fn_score]
+        try:
+            self._feed_input_names = [self.input_layer.name]
+            self._feed_output_names = [self.decoder_chain.name,
+                                       self.radi_check.name]
+            self._feed_loss_fns = [loss_fn_decoded, loss_fn_score]
+        except AttributeError:
+            # Newer build set those attributes as read only
+            pass
 
         self.build((None, None, seq_size))
         if ckpt_path is not None:
@@ -282,7 +271,12 @@ class CallSeq(Model):
         if len(shape) == 2:
             inputs = tf.expand_dims(inputs, axis=0)  # Add batch dimension
 
-        _, outputs = self(inputs, training=False)
+        e = self.input_layer(inputs)
+        e = self.n(e, training=False)
+        # Encoding pass
+        e = self.rnns(e, training=False)
+        e_norm = self.n2(e)
+        outputs = self.radi_check(e_norm)
 
         if len(shape) == 2:
             # Ouput a single vector, as we received a single sequence.
