@@ -52,7 +52,7 @@ def input_fn(mode):
     d = d.map(_parse_tensor)
     init_state = tf.constant(
         0, dtype=tf.float32,
-        shape=(FLAGS.timesteps, SEQ_SIZE))
+        shape=(FLAGS.timesteps, M_ATTR.SEQ_SIZE))
     d = d.apply(tf.data.experimental.scan(
         init_state, fold_to_sequence))
 
@@ -181,7 +181,7 @@ class CallSeq(Model):
 
         if ckpt_path is None:
             # Use inferred global value if not available.
-            seq_size = SEQ_SIZE
+            seq_size = M_ATTR.SEQ_SIZE
         else:
             ckpt_reader = tf.train.load_checkpoint(ckpt_path)
             # Find the input config attribute
@@ -319,24 +319,32 @@ def model_fn():
 loss_fn = [loss_fn_decoded, loss_fn_score]
 
 
-# Here we find the SEQ_SIZE by evaluate a single entry in dataset,
-# assumed that the dataset is uniform by trusting the generate
-# function. This happen at the very end of import process for this
-# module and required some power.
-# The iterable interface on `Dataset` only available when eager
-# execution is enabled. It's on by default on TF-2.0, but not
-# for earlier versions.
-# It's simplier to run this small op with eager execution enabled.
-with _context.eager_mode():
-    _base = tf.data.TFRecordDataset(TF_DATA_FILE)
-    _base = _base.map(_parse_tensor)
-    for _i in _base.take(1):
-        break
-    _shape = tf.shape(_i)[0]
-    # This is the same as int and can be passed to TF functions
-    SEQ_SIZE = _shape.numpy()
+class _MAttr(object):
+    """Deferred attribute  inference."""
+    __cached_seq_size__ = None
+
+    @property
+    def SEQ_SIZE(self):
+        """Infered sequence size, as read from dataset."""
+
+        if self.__cached_seq_size__ is None:
+            # Here we find the SEQ_SIZE by evaluate a single entry in dataset,
+            # assumed that the dataset is uniform by trusting the generate
+            # function.
+            # The iterable interface on `Dataset` only available when eager
+            # execution is enabled. It's on by default on TF-2.0, but not
+            # for earlier versions.
+            # It's simplier to run this small op with eager execution enabled.
+            with _context.eager_mode():
+                _base = tf.data.TFRecordDataset(TF_DATA_FILE)
+                _base = _base.map(_parse_tensor)
+                for _i in _base.take(1):
+                    break
+                _shape = tf.shape(_i)[0]
+                # This is the same as int and can be passed to TF functions
+                self.__cached_seq_size__ = _shape.numpy()
+
+        return self.__cached_seq_size__
 
 
-del _i
-del _base
-del _shape
+M_ATTR = _MAttr()
