@@ -281,7 +281,6 @@ class CallSeq(Model):
 
         e = self.input_layer(inputs)
         e = self.n(e, training=False)
-        # Encoding pass
         e = self.rnns(e, training=False)
         e_norm = self.n2(e)
         outputs = self.radi_check(e_norm)
@@ -294,7 +293,7 @@ class CallSeq(Model):
             return signs.numpy()
         return signs
 
-    __sig_to_text = {
+    _sig_to_text = {
         np.int32(-1): 'BAD',
         np.int32(0): 'UNKNOWN',
         np.int32(1): 'OK'
@@ -302,7 +301,7 @@ class CallSeq(Model):
 
     @classmethod
     def decision_to_text(cls, outputs):
-        return [cls._CallSeq__sig_to_text[i] for i in outputs]
+        return [cls._sig_to_text[i] for i in outputs]
 
 
 def loss_fn_decoded(y_true, y_pred):
@@ -327,7 +326,7 @@ loss_fn = [loss_fn_decoded, loss_fn_score]
 
 
 class _MAttr(object):
-    """Deferred attribute  inference."""
+    """Deferred attribute inference."""
     __cached_seq_size__ = None
 
     @property
