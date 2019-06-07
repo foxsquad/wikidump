@@ -36,7 +36,7 @@ def to_tuple(i):
         (
             # decoder output
             i,
-            # const value of possitive outcome
+            # const value of positive outcome
             tf.constant(1.0, shape=(FLAGS.timesteps, ))
         )
     )
@@ -84,7 +84,7 @@ class RadiusScoreLayer(Layer):
 
     def build(self, input_shape):
         # Hyper-space dimension size, return from previous layer.
-        # We expect the input tensor has 3 dimentions and last one
+        # We expect the input tensor has 3 dimensions and last one
         # must available.
         assert input_shape.ndims == 3
         assert input_shape[-1] is not None
@@ -117,7 +117,14 @@ class RadiusScoreLayer(Layer):
 
 
 class RNNBlock(Layer):
-    """Compossed RNN layers."""
+    """Composed RNN layers.
+
+    This layer encapsulates a stack of recurrent layers. Each will process
+    input signal into a latent space by its own rules.
+
+    This layer could act as encoder pass in auto-encoder pair for a larger
+    model.
+    """
 
     def __init__(self, *args, **kwargs):
         super(RNNBlock, self).__init__(*args, **kwargs)
@@ -139,7 +146,7 @@ class RNNBlock(Layer):
 
 
 class DecoderChain(Layer):
-    """Embeded decoder.
+    """Embedded decoder.
 
     This is decoder part of auto-encoder pair.
     """
@@ -150,8 +157,8 @@ class DecoderChain(Layer):
         self.output_dim = output_dim
 
         inits = dict(
-            kernel_initializer=initializers.GlorotNormalV2(),
-            bias_initializer=initializers.GlorotNormalV2(),
+            kernel_initializer=initializers.GlorotUniformV2(),
+            bias_initializer=initializers.GlorotUniformV2(),
             kernel_regularizer=regularizers.l2(0.001),
             activity_regularizer=regularizers.l2(0.001)
         )
@@ -263,7 +270,7 @@ class CallSeq(Model):
         ```
 
         The input tensor must have at least the shape of
-        `(seq_length, seq_size)`. `seq_size` can be evaluated automaticaly
+        `(seq_length, seq_size)`. `seq_size` can be evaluated automatically
         by this module if we have train dataset.
 
         This model can work with arbitrary length of input sequence.
@@ -280,7 +287,7 @@ class CallSeq(Model):
         outputs = self.radi_check(e_norm)
 
         if len(shape) == 2:
-            # Ouput a single vector, as we received a single sequence.
+            # Output a single vector, as we received a single sequence.
             outputs = tf.squeeze(outputs, axis=0)
         signs = tf.cast(tf.sign(outputs), tf.int32)
         if _context.executing_eagerly():
@@ -325,7 +332,7 @@ class _MAttr(object):
 
     @property
     def SEQ_SIZE(self):
-        """Infered sequence size, as read from dataset."""
+        """Inferred sequence size, as read from dataset."""
 
         if self.__cached_seq_size__ is None:
             # Here we find the SEQ_SIZE by evaluate a single entry in dataset,
