@@ -1,10 +1,18 @@
 # Process description to transform data from raw CSV file
 fields:
-  source: caller_id
-  destination: caller_id
-  call-start-time-sec: timestamp
-  delta-time-sec:
-    name: scale
-    value: 1000
-  lat: raw
-  long: raw
+  # source: caller_id
+  # destination: caller_id
+  # call-start-time-sec: timestamp
+  # delta-time-sec:
+  #   name: scale
+  #   value: 1000
+  # lat: raw
+  # long: raw
+  time: timestamp
+  from: caller_id
+  to: caller_id
+  src_ip:
+    name: geoip2
+    fields:
+      - latitude
+      - longitude

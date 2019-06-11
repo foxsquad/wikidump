@@ -221,6 +221,35 @@ class GeoIpParserCommand(Command):
         return [latitude, longitude, accuracy_radius]
 
 
+@Command.register(name='geoip2')
+class GeoIp2ParserCommand(Command):
+    """Direct geo-ip parser, without any further process."""
+
+    __ALL__ = ('latitude', 'longitude', 'accuracy_radius')
+
+    def __init__(self, field_name):
+        super().__init__(field_name)
+        with open(GEO_DB_FILE, 'rb') as f:
+            self.reader = maxminddb.open_database(f, maxminddb.MODE_FD)
+        self.fields = self.__ALL__
+
+    def load(self, fields=('latitude', 'longitude', 'accuracy_radius')):
+        self.fields = fields or self.__ALL__
+        return
+
+    def call(self, data):
+        src_ip = data
+        geoip_data = self.reader.get(src_ip)
+
+        latitude = geoip_data['location']['latitude']
+        longitude = geoip_data['location']['longitude']
+        accuracy_radius = geoip_data['location']['accuracy_radius']
+
+        full_data = zip(self.__ALL__, (latitude, longitude, accuracy_radius))
+
+        return [v for k, v in full_data if k in self.fields]
+
+
 @Command.register(name='scale')
 class ScaleCommand(Command):
     def load(self, value=1000):
@@ -256,7 +285,7 @@ def cache_to_tf_records(argv):
     import tensorflow as tf
     from tensorflow.python.eager import context
     from tensorflow.python.util import deprecation
-    from call_seq import TF_DATA_FILE
+    from mseq import TF_DATA_FILE
 
     try:
         from tqdm import tqdm
