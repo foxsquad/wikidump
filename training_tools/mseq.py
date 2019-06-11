@@ -3,10 +3,10 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from absl import flags
+from absl import flags, logging
 from tensorflow.python.eager import context as _context
-from tensorflow.python.keras import Model, initializers, losses, regularizers
-from tensorflow.python.keras.activations import tanh
+from tensorflow.python.keras import Model, activations, \
+    constraints, initializers, losses, regularizers
 from tensorflow.python.keras.engine import InputSpec
 from tensorflow.python.keras.layers import GRU, \
     BatchNormalization, Dense, InputLayer, Layer
@@ -16,7 +16,7 @@ FLAGS = flags.FLAGS
 
 TF_DATA_FILE = os.path.join(
     os.path.dirname(__file__),
-    'data', 'node_cache.tfrecord')
+    'data', 'real_nodes.tfrecord')
 
 
 flags.DEFINE_integer('timesteps', 20, 'Train input sequence value')
@@ -34,10 +34,9 @@ def to_tuple(i):
     return (
         i,  # input
         (
-            # decoder output
-            i,
-            # const value of positive outcome
-            tf.constant(1.0, shape=(FLAGS.timesteps, ))
+            i,  # Expected decoder output is the same as input
+            tf.constant(1.0, tf.float32, ()),  # Expected positive outcome
+            # tf.constant(0.0, tf.float32, ()),  # Expected formal loss
         )
     )
 
@@ -78,9 +77,11 @@ class RadiusScoreLayer(Layer):
     sphere surface.
     """
 
-    def __init__(self, init_radius=0.5, **kwargs):
+    def __init__(self, init_radius=0.5, n=1.0, **kwargs):
         super(RadiusScoreLayer, self).__init__(**kwargs)
+        assert 0.0 < n <= 1.0, 'Control value `n` must in range (0, 1]'
         self.init_radius = init_radius
+        self.n = n
 
     def build(self, input_shape):
         # Hyper-space dimension size, return from previous layer.
@@ -93,27 +94,36 @@ class RadiusScoreLayer(Layer):
         self.input_spec = InputSpec(axes={-1: self.dim})
 
         self.radius = self.add_weight(
-            'hyper_sphere_radius',
-            shape=(), dtype=tf.float32,
-            initializer=initializers.ConstantV2(self.init_radius),
-            regularizer=regularizers.l2(0.01),
+            name='hyper_sphere_radius', shape=(),
+            initializer=initializers.constant(self.init_radius),
+            regularizer=regularizers.l1(1),  # This will push the radius as small as possible.
+            constraint=constraints.NonNeg(),
             trainable=True)
 
         self.center = self.add_weight(
-            'hyper_sphere_center',
-            shape=(self.dim, ),
-            initializer=initializers.GlorotUniformV2(),
-            regularizer=regularizers.l2(0.001),
+            name='hyper_sphere_center', shape=(self.dim, ),
+            initializer=initializers.glorot_uniform(),
             trainable=True)
 
         super(RadiusScoreLayer, self).build(input_shape)
 
     def call(self, input_tensor):
-        x = input_tensor - self.center
-        x = tf.norm(x, axis=-1)
+        # This is the formal loss value.
+        # formal_loss = (
+        #     self.radius**2
+        #     + (
+        #         tf.math.reduce_sum(self.slack_var)
+        #         / self.n
+        #         / FLAGS.timesteps
+        #     ))
 
-        diff = tanh(self.radius ** 2 - x ** 2)
-        return diff
+        cx = tf.norm(input_tensor - self.center, axis=-1)
+        return activations.tanh(self.radius**2 - cx**2)
+
+    def sign(self, input_tensor):
+        """Return predicted sign value for input tensor."""
+        cx = tf.norm(input_tensor - self.center, axis=-1)
+        return tf.sign(self.radius**2 - cx**2)
 
 
 class RNNBlock(Layer):
@@ -156,9 +166,10 @@ class DecoderChain(Layer):
         assert output_dim is not None
         self.output_dim = output_dim
 
+        # Common initializers
         inits = dict(
-            kernel_initializer=initializers.GlorotUniformV2(),
-            bias_initializer=initializers.GlorotUniformV2(),
+            kernel_initializer=initializers.glorot_uniform(),
+            bias_initializer=initializers.glorot_uniform(),
             kernel_regularizer=regularizers.l2(0.001),
             activity_regularizer=regularizers.l2(0.001)
         )
@@ -216,24 +227,26 @@ class CallSeq(Model):
 
         self.input_layer = InputLayer(input_shape=(None, seq_size))
         self.n = BatchNormalization(name='batch_norm')
-        self.n2 = BatchNormalization(name='batch_norm_2')
+        # self.n2 = BatchNormalization(name='batch_norm_2')
 
         self.decoder_chain = DecoderChain(seq_size, name='decoder')
 
         self.rnns = RNNBlock(name='rnns')
-        self.radi_check = RadiusScoreLayer(1.0, name='score')
+        self.ball_layer = RadiusScoreLayer(1.0, 0.1, name='score')
 
         self._network_nodes = (
-            self.input_layer, self.n, self.n2,
-            self.decoder_chain, self.rnns, self.radi_check,
+            self.input_layer, self.n,
+            self.decoder_chain, self.rnns,
+            self.ball_layer,
         )
         try:
             self._feed_input_names = [self.input_layer.name]
             self._feed_output_names = [self.decoder_chain.name,
-                                       self.radi_check.name]
+                                       self.ball_layer.name]
             self._feed_loss_fns = [loss_fn_decoded, loss_fn_score]
-        except AttributeError:
+        except AttributeError as e:
             # Newer build set those attributes as read only
+            logging.error('Could not set internal attribute due to breaking API change: %s', e)
             pass
 
         self.build((None, None, seq_size))
@@ -248,12 +261,10 @@ class CallSeq(Model):
         # Encoding pass
         e = self.rnns(e, training=training)
 
-        e_norm = self.n2(e)
-
         # Decoding pass
-        d = self.decoder_chain(e_norm)
+        d = self.decoder_chain(e)
 
-        score = self.radi_check(e_norm)
+        score = self.ball_layer(e)
 
         return d, score
 
@@ -282,13 +293,12 @@ class CallSeq(Model):
         e = self.input_layer(inputs)
         e = self.n(e, training=False)
         e = self.rnns(e, training=False)
-        e_norm = self.n2(e)
-        outputs = self.radi_check(e_norm)
+        outputs = self.ball_layer.sign(e)
 
         if len(shape) == 2:
             # Output a single vector, as we received a single sequence.
             outputs = tf.squeeze(outputs, axis=0)
-        signs = tf.cast(tf.sign(outputs), tf.int32)
+        signs = tf.cast(outputs, tf.int32)
         if _context.executing_eagerly():
             return signs.numpy()
         return signs
@@ -316,6 +326,10 @@ def loss_fn_decoded(y_true, y_pred):
 
 def loss_fn_score(y_true, y_pred):
     return losses.hinge(y_true, y_pred)
+
+
+def loss_fn_formal(y_true, y_pred):
+    return losses.mse(y_true, y_pred)
 
 
 def model_fn():
