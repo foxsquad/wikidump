@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from absl import flags, logging
+from absl import flags
 from tensorflow.python.eager import context as _context
 from tensorflow.python.keras import Model, activations, \
     constraints, initializers, losses, regularizers
@@ -234,25 +234,19 @@ class CallSeq(Model):
         self.rnns = RNNBlock(name='rnns')
         self.ball_layer = RadiusScoreLayer(1.0, 0.1, name='score')
 
-        self._network_nodes = (
-            self.input_layer, self.n,
-            self.decoder_chain, self.rnns,
-            self.ball_layer,
-        )
-        try:
-            self._feed_input_names = [self.input_layer.name]
-            self._feed_output_names = [self.decoder_chain.name,
-                                       self.ball_layer.name]
-            self._feed_loss_fns = [loss_fn_decoded, loss_fn_score]
-        except AttributeError as e:
-            # Newer build set those attributes as read only
-            logging.error('Could not set internal attribute due to breaking API change: %s', e)
-            pass
-
         self.build((None, None, seq_size))
         if ckpt_path is not None:
             saver = tf.train.Checkpoint(model=self)
             saver.restore(tf.train.latest_checkpoint(ckpt_path))
+
+    def _set_output_attrs(self, outputs):
+        super()._set_output_attrs(outputs)
+        # Override output names
+        self.output_names = ['decoder', 'score']
+        # FIXME: Why did we have to do this?
+        # The estimator spec (maybe) doesn't override this function,
+        # but it could correctly collect the output names somewhere.
+        # May be we need to dig deep into tf.estimator module?
 
     def call(self, inputs, training=None):
         e = self.input_layer(inputs)
@@ -266,7 +260,7 @@ class CallSeq(Model):
 
         score = self.ball_layer(e)
 
-        return d, score
+        return {'decoder': d, 'score': score}
 
     def decision(self, inputs):
         """Return decision value based on single or batched input.
@@ -336,7 +330,9 @@ def model_fn():
     return CallSeq(name='a_subclass_model')
 
 
-loss_fn = [loss_fn_decoded, loss_fn_score]
+loss_fn = {'decoder': loss_fn_decoded, 'score': loss_fn_score}
+
+metrics = {'score': 'acc'}
 
 
 class _MAttr(object):
