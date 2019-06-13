@@ -203,31 +203,24 @@ class CallSeq(Model):
         else:
             ckpt_reader = tf.train.load_checkpoint(ckpt_path)
             # Find the input config attribute
-            input_cfg = None
-            for name in ckpt_reader.get_variable_to_shape_map():
-                if 'input_layer' in name and 'OBJECT_CONFIG_JSON' in name:
-                    input_cfg = json.loads(ckpt_reader.get_tensor(name))
+            first_layer_shape = None
+            for name, value in ckpt_reader.get_variable_to_shape_map().items():
+                if 'n/moving_mean' in name or 'batch_norm/moving_mean' in name:
+                    first_layer_shape = value
                     break
-            assert (
-                input_cfg is not None
-                and 'config' in input_cfg
-                and 'batch_input_shape' in input_cfg['config']
-            ), (
+            assert first_layer_shape is not None, (
                 'Checkpoint file in path %s does not contain config option '
-                'for input layer.' % ckpt_path
+                'for input layer.\nDebug string:\n %s' % (
+                    ckpt_path, ckpt_reader.debug_string().decode())
             )
             # Load seq_size from input_cfg
-            seq_size = input_cfg['config']['batch_input_shape'][-1]
-
-            # Load seq_size from input_cfg
-            batch_input_shape = input_cfg['config']['batch_input_shape']
-            seq_size = batch_input_shape[-1]
+            seq_size = first_layer_shape[-1]
 
         self.seq_size = seq_size
 
         self.input_layer = InputLayer(input_shape=(None, seq_size))
         self.n = BatchNormalization(name='batch_norm')
-        # self.n2 = BatchNormalization(name='batch_norm_2')
+        self.n2 = BatchNormalization(name='post_norm')
 
         self.decoder_chain = DecoderChain(seq_size, name='decoder')
 
