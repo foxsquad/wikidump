@@ -298,7 +298,18 @@ class CallSeq(Model):
 
     @classmethod
     def decision_to_text(cls, outputs):
-        return [cls._sig_to_text[i] for i in outputs]
+        is_ndarray = isinstance(outputs, np.ndarray)
+
+        if is_ndarray:
+            shape = np.shape(outputs)
+            n_outputs = outputs.flatten()
+        else:
+            n_outputs = outputs
+        mapped = np.array([list(map(lambda x: cls._sig_to_text[x], n_outputs))])
+
+        if is_ndarray:
+            return np.reshape(mapped, shape)
+        return mapped
 
 
 def loss_fn_decoded(y_true, y_pred):
