@@ -1,4 +1,3 @@
-import json
 import os
 
 import numpy as np
@@ -8,8 +7,9 @@ from tensorflow.python.eager import context as _context
 from tensorflow.python.keras import Model, activations, \
     constraints, initializers, losses, regularizers
 from tensorflow.python.keras.engine import InputSpec
-from tensorflow.python.keras.layers import GRU, \
-    BatchNormalization, Dense, InputLayer, Layer
+from tensorflow.python.keras.layers import BatchNormalization, \
+    Dense, InputLayer, Layer
+from tensorflow.python.keras.layers import LSTM_v2 as LSTM
 from tensorflow.python.ops import math_ops, nn
 
 FLAGS = flags.FLAGS
@@ -94,15 +94,15 @@ class RadiusScoreLayer(Layer):
         self.input_spec = InputSpec(axes={-1: self.dim})
 
         self.radius = self.add_weight(
-            name='hyper_sphere_radius', shape=(),
-            initializer=initializers.constant(self.init_radius),
+            name='hyper_sphere_radius', shape=(), dtype=tf.float32,
+            initializer=initializers.ConstantV2(self.init_radius),
             regularizer=regularizers.l1(1),  # This will push the radius as small as possible.
             constraint=constraints.NonNeg(),
             trainable=True)
 
         self.center = self.add_weight(
-            name='hyper_sphere_center', shape=(self.dim, ),
-            initializer=initializers.glorot_uniform(),
+            name='hyper_sphere_center', shape=(self.dim, ), dtype=tf.float32,
+            initializer=initializers.GlorotUniformV2(),
             trainable=True)
 
         super(RadiusScoreLayer, self).build(input_shape)
@@ -138,12 +138,12 @@ class RNNBlock(Layer):
 
     def __init__(self, *args, **kwargs):
         super(RNNBlock, self).__init__(*args, **kwargs)
-        self.r1 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
-        self.r2 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
-        self.r3 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
-        self.r4 = GRU(30, 'tanh', 'sigmoid', return_sequences=True)
-        self.r5 = GRU(20, 'tanh', 'sigmoid', return_sequences=True)
-        self.r6 = GRU(10, 'tanh', 'sigmoid', return_sequences=True)
+        self.r1 = LSTM(30, return_sequences=True)
+        self.r2 = LSTM(30, return_sequences=True)
+        self.r3 = LSTM(30, return_sequences=True)
+        self.r4 = LSTM(30, return_sequences=True)
+        self.r5 = LSTM(30, return_sequences=True)
+        self.r6 = LSTM(30, return_sequences=True)
 
     def call(self, inputs, training=None):
         e = self.r1(inputs, training=training)
@@ -168,18 +168,23 @@ class DecoderChain(Layer):
 
         # Common initializers
         inits = dict(
-            kernel_initializer=initializers.glorot_uniform(),
-            bias_initializer=initializers.glorot_uniform(),
+            kernel_initializer=initializers.GlorotUniformV2(),
+            bias_initializer=initializers.GlorotUniformV2(),
             kernel_regularizer=regularizers.l2(0.001),
             activity_regularizer=regularizers.l2(0.001)
         )
-        self.d1 = Dense(20, 'relu', name='decoder_1', **inits)
-        self.d2 = Dense(30, 'relu', name='decoder_2', **inits)
+        self.r1 = LSTM(30, return_sequences=True)
+        self.r2 = LSTM(30, return_sequences=True)
+
+        # self.d1 = Dense(20, 'relu', name='decoder_1', **inits)
+        # self.d2 = Dense(30, 'relu', name='decoder_2', **inits)
         self.d3 = Dense(output_dim, None, name='decoder_out', **inits)
 
     def call(self, inputs):
-        d = self.d1(inputs)
-        d = self.d2(d)
+        d = self.r1(inputs)
+        d = self.r2(d)
+        # d = self.d1(d)
+        # d = self.d2(d)
         d = self.d3(d)
         return d
 
@@ -213,7 +218,7 @@ class CallSeq(Model):
                 'for input layer.\nDebug string:\n %s' % (
                     ckpt_path, ckpt_reader.debug_string().decode())
             )
-            # Load seq_size from input_cfg
+            # Load seq_size from config
             seq_size = first_layer_shape[-1]
 
         self.seq_size = seq_size
@@ -241,17 +246,22 @@ class CallSeq(Model):
         # but it could correctly collect the output names somewhere.
         # May be we need to dig deep into tf.estimator module?
 
-    def call(self, inputs, training=None):
+    def _encode(self, inputs, training):
+        """Output latent space vector of inputs."""
         e = self.input_layer(inputs)
         e = self.n(e, training=training)
-
         # Encoding pass
         e = self.rnns(e, training=training)
+
+        return e
+
+    def call(self, inputs, training=None):
+        e = self._encode(inputs, training)
 
         # Decoding pass
         d = self.decoder_chain(e)
 
-        score = self.ball_layer(e)
+        score = self.ball_layer(self.n2(e))
 
         return {'decoder': d, 'score': score}
 
@@ -269,17 +279,17 @@ class CallSeq(Model):
 
         The input tensor must have at least the shape of
         `(seq_length, seq_size)`. `seq_size` can be evaluated automatically
-        by this module if we have train dataset.
+        by this module if we have train dataset or loaded from specific
+        checkpoint.
 
         This model can work with arbitrary length of input sequence.
         """
-        shape = tf.shape(inputs)
+        shape = tf.shape(inputs, out_type=tf.int32, name='input_shape')
         if len(shape) == 2:
             inputs = tf.expand_dims(inputs, axis=0)  # Add batch dimension
 
-        e = self.input_layer(inputs)
-        e = self.n(e, training=False)
-        e = self.rnns(e, training=False)
+        e = self._encode(inputs, False)
+        e = self.n2(e, training=False)
         outputs = self.ball_layer.sign(e)
 
         if len(shape) == 2:
@@ -323,7 +333,7 @@ def loss_fn_decoded(y_true, y_pred):
 
 
 def loss_fn_score(y_true, y_pred):
-    return losses.hinge(y_true, y_pred)
+    return losses.mse(y_true, y_pred)
 
 
 def loss_fn_formal(y_true, y_pred):
