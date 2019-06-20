@@ -6,7 +6,6 @@ from absl import flags
 from tensorflow.python.eager import context as _context
 from tensorflow.python.keras import Model, activations, \
     constraints, initializers, losses, regularizers
-from tensorflow.python.keras.engine import InputSpec
 from tensorflow.python.keras.layers import BatchNormalization, \
     Dense, InputLayer, Layer
 from tensorflow.python.keras.layers import LSTM_v2 as LSTM
@@ -90,8 +89,6 @@ class RadiusScoreLayer(Layer):
         assert input_shape.ndims == 3
         assert input_shape[-1] is not None
         self.dim = input_shape[-1]
-
-        self.input_spec = InputSpec(axes={-1: self.dim})
 
         self.radius = self.add_weight(
             name='hyper_sphere_radius', shape=(), dtype=tf.float32,
